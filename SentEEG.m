@@ -1,7 +1,8 @@
-function SentEEG(parameterFileName, stimFilePrefix, subjID)
+function SentEEG()
 
 %%Basic script for presenting EEG sentence study
 %%First version 6/3/11 Ellen Lau
+%%Modified by Cybelle Smith  Fall 2011 (10/10/11)
 %%Partially based on code from Scott Burns, MGH
 
 %%Inputs:
@@ -44,10 +45,13 @@ DaqDOut(di,1,0); % this zeros out the trigger line to get started
 
 
 %%% Initialize file names
-
-stimFileName = strcat(stimFilePrefix,'.txt')
-logFileName = strcat(subjID,'_',stimFilePrefix,'.log')  %%logs events
-recFileName = strcat(subjID,'_',stimFilePrefix,'.rec')  %%logs recording parameters
+%%% Select parameter file
+[paramFileName, paramPath] = uigetfile('*.par', 'Select parameter file');
+[stimFileName, stimPath] = uigetfile('*.txt', 'Select stimulus file');
+subjID = input('Enter subject ID: ', 's');
+stimFilePrefix = strrep(stimFileName,'.txt','')
+logFileName = strcat(stimPath,subjID,'_',stimFilePrefix,'.log') %%logs events in same directory as stimulus file
+recFileName = strcat(stimPath,subjID,'_',stimFilePrefix,'.rec')  %%logs recording parameters in same directory as stimulus file
 
 
 %%% Create log files
@@ -67,8 +71,8 @@ fclose(fid);
 
 %ReadParameterFile is a special function for reading the parameters
 %Defined at end of script
-parameterFileName
-[exPar] = ReadParameterFile(parameterFileName)
+paramFileNameAndPath = strcat(paramPath,paramFileName)
+[exPar] = ReadParameterFile(paramFileNameAndPath)
 
 
 %ReadStimulusFile is a special function for reading in stim list. 
@@ -252,9 +256,9 @@ fclose(fid);
 end
 
 
-function [exPar] = ReadParameterFile(parameterFileName)
+function [exPar] = ReadParameterFile(paramFileName)
 
-fid = fopen(parameterFileName,'rt');
+fid = fopen(paramFileName,'rt');
 
 if (-1 == fid)
     error('Could not open experiment parameters file.')

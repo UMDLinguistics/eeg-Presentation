@@ -1,7 +1,8 @@
-function SentEEG(parameterFileName, stimFilePrefix, subjID)
+function SentEEG()
 
 %%Basic script for presenting EEG sentence study
 %%First version 6/3/11 Ellen Lau
+%%Modified by Cybelle Smith  Fall 2011 (10/10/11)
 %%Partially based on code from Scott Burns, MGH
 
 %%Inputs:
@@ -44,7 +45,10 @@ DaqDOut(di,1,0); % this zeros out the trigger line to get started
 
 
 %%% Initialize file names
-
+%%% Select parameter file
+[paramFileName, paramPathName] = uigetfile('*.par', 'Select parameter file');
+[stimFileName, stimPathName] = uigetfile('*.txt', 'Select stimulus file');
+subjID = input('Enter subject ID: ', 's');
 stimFileName = strcat(stimFilePrefix,'.txt')
 logFileName = strcat(subjID,'_',stimFilePrefix,'.log')  %%logs events
 recFileName = strcat(subjID,'_',stimFilePrefix,'.rec')  %%logs recording parameters
@@ -271,9 +275,9 @@ exPar.IQI = P{1}(6);
 exPar.ITI = P{1}(7);
 exPar.textSize = P{1}(8);
 exPar.presDelay = P{1}(9);
-%wordDuration ISI fixDuration IFI qDuration IQI ITI textSize
+%wordDuration ISI fixDuration IFI qDuration IQI ITI textSize presDelay
 
-
+%should add other validators, e.g. should be 9 parameters
 if isempty(P);
     fprintf('Warning: experiment not found in experiment parameters file.\n');
 end

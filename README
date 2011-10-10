@@ -1,6 +1,6 @@
 This repository stores all code necessary for presenting stimuli on the EEG lab acquisition computer.  So far, all of the code runs in MATLAB and is not related to the Psyscope presentation set-up.
 
-PLEASE NOTE: these are copies of the code running in the PsyT folder and are being kept as separate files.  Please make sure that the most updated versions of the code in this repository have been copied to PsyT, or else you will be running an outdated version of the script!
+PLEASE NOTE: these are copies of the code running in the Desktop/PsyT folder and are being kept as separate files.  Please make sure that the most updated versions of the code in this repository are in the PsyT folder, or else you will be running an outdated version of the script!  Best practice is probably to edit the version in the PsyT folder, then copy it to this repository, and then push.
 
 Below, please find a description of all of the files in the repository:
 

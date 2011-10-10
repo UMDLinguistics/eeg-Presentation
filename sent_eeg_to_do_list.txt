@@ -1,0 +1,9 @@
+SentEEG to-do list:
+
+make it so can access files in a separate folder from PsyT
+
+make it so that if no log file or rec file exist, it warns the user and then creates them as blank text files (also, seems to require that a log file exists but then writes one with a different name!!)
+
+
+
+
