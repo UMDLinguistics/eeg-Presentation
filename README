@@ -1,0 +1,1 @@
+This repository stores all code necessary for presenting stimuli on the EEG lab acquisition computer.  So far, all of the code runs in MATLAB and is not related to the Psyscope presentation set-up.
