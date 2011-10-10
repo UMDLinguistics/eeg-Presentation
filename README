@@ -1,1 +1,9 @@
 This repository stores all code necessary for presenting stimuli on the EEG lab acquisition computer.  So far, all of the code runs in MATLAB and is not related to the Psyscope presentation set-up.
+
+PLEASE NOTE: these are copies of the code running in the PsyT folder and are being kept as separate files.  Please make sure that the most updated versions of the code in this repository have been copied to PsyT, or else you will be running an outdated version of the script!
+
+Below, please find a description of all of the files in the repository:
+
+SentEEG.m: updated version of SentEEG.m, placed in github repository on 10/10/2011.
+
+SentEEG_old_summer2011.m: old version of SentEEG.m as of summer 2011.  Still incorporates code to delay the onset of the trigger until some fixed interval after the stimulus is presented visually.  The earliest version of SentEEG.m (not the one labeled _old_summer_2011) has this code eliminated, meaning that the "delay" parameter is useless (but the parameter still exists).
