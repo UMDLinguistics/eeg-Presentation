@@ -29,7 +29,7 @@ function SentEEG()
 
 
 %%% Hard-coded parameters
-
+default_experimental_folder = '/Users/cnllab/Desktop/example_experiment/'
 beginTrigger = 254;
 questionTrigger = 253;
 button1 = KbName('f');
@@ -46,13 +46,14 @@ DaqDOut(di,1,0); % this zeros out the trigger line to get started
 
 %%% Initialize file names
 %%% Select parameter file
-[paramFileName, paramPath] = uigetfile('*.par', 'Select parameter file');
-[stimFileName, stimPath] = uigetfile('*.txt', 'Select stimulus file');
+[stimFileName, stimPath] = uigetfile('*.txt', 'Select stimulus file',default_experimental_folder);
+
+[paramFileName, paramPath] = uigetfile('*.par', 'Select parameter file',stimPath);
+
 subjID = input('Enter subject ID: ', 's');
 stimFilePrefix = strrep(stimFileName,'.txt','')
 logFileName = strcat(stimPath,subjID,'_',stimFilePrefix,'.log') %%logs events in same directory as stimulus file
 recFileName = strcat(stimPath,subjID,'_',stimFilePrefix,'.rec')  %%logs recording parameters in same directory as stimulus file
-
 
 %%% Create log files
 
@@ -73,18 +74,19 @@ fclose(fid);
 %Defined at end of script
 paramFileNameAndPath = strcat(paramPath,paramFileName)
 [exPar] = ReadParameterFile(paramFileNameAndPath)
-
+%exPar.toString
 
 %ReadStimulusFile is a special function for reading in stim list. 
 %Defined at end of this script
-[stimulusMatrix,triggerMatrix, questionList] = ReadStimulusFile(stimFileName) 
+stimFileNameAndPath = strcat(stimPath,stimFileName)
+[stimulusMatrix,triggerMatrix, questionList] = ReadStimulusFile(stimFileNameAndPath) 
 numItems = length(stimulusMatrix);
 logData = zeros(numItems,10);
 
 %WriteRecFile is a special function for writing out the recording
 %parameters.
 %Defined at end of script
-WriteRecFile;
+WriteRecFile(recFileName,exPar,subjID, stimFileNameAndPath,paramFileNameAndPath);
 
 
 % Grab a time baseline for the entire experiment and send a trigger to log
@@ -139,6 +141,8 @@ for i = 1:numItems
         WaitSecs(exPar.ISI);
  
         % Log this trial
+        %Change this so that ONLY write to files AFTER the experiment is
+        %done!  That way won't mess with the experimental timing
         WriteLogFile(logFileName, timeToLog, currentWord, currentTrigger);
     end
     
@@ -157,6 +161,8 @@ for i = 1:numItems
         % necessary or desirable to do so (may need to change code)
 
         % Log the presentation of the response screen
+        %Change this so that ONLY write to files AFTER the experiment is
+        %done!  That way won't mess with the experimental timing
         WriteLogFile(logFileName, timeToLog, '?', questionTrigger);
 
         
@@ -245,7 +251,7 @@ function WriteLogFile(logFileName,timeToLog,currentWord,currentTrigger)
 
 fid = fopen(logFileName,'a');
 if fid == -1
-    error('Can not write to log file.')
+    error('Cannot write to log file.')
 end
 
 fmt = '%.3f\t%s\t%i\n';
@@ -275,6 +281,7 @@ exPar.IQI = P{1}(6);
 exPar.ITI = P{1}(7);
 exPar.textSize = P{1}(8);
 exPar.presDelay = P{1}(9);
+exPar.toString = textLine
 %wordDuration ISI fixDuration IFI qDuration IQI ITI textSize presDelay
 
 %should add other validators, e.g. should be 9 parameters
@@ -285,8 +292,21 @@ fclose(fid);
 
 end
 
-function WriteRecFile
+function WriteRecFile (recFileName,exPar,subjID, stimFileNameAndPath,paramFileNameAndPath)
+fid = fopen(recFileName,'a');
+if fid == -1
+    error('Can not write to rec file.')
 end
+fmt = '%s\t%s\n';
+fprintf(fid,fmt,'Experiment File:',stimFileNameAndPath);
+fprintf(fid,fmt,'Parameter File:',paramFileNameAndPath);
+fprintf(fid,fmt,'Date:',datestr(now));
+fprintf(fid,fmt,'Subject ID:',subjID);
+fprintf(fid,fmt,'Parameters: ',exPar.toString);
+
+fclose(fid);
+end
+
 
 
 
