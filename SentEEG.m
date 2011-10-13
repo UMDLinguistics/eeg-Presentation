@@ -1,4 +1,4 @@
-function SentEEG()
+function expt = SentEEG() %temporarily outputing experiment cell array for testing purposes only
 
 %%Basic script for presenting EEG sentence study
 %%First version 6/3/11 Ellen Lau
@@ -46,14 +46,14 @@ DaqDOut(di,1,0); % this zeros out the trigger line to get started
 
 %%% Initialize file names
 %%% Select parameter file
-[stimFileName, stimPath] = uigetfile('*.txt', 'Select stimulus file',default_experimental_folder);
+[exptFileName, exptPath] = uigetfile('*.expt', 'Select experiment file',default_experimental_folder);
 
-[paramFileName, paramPath] = uigetfile('*.par', 'Select parameter file',stimPath);
+[paramFileName, paramPath] = uigetfile('*.par', 'Select parameter file',exptPath);
 
 subjID = input('Enter subject ID: ', 's');
-stimFilePrefix = strrep(stimFileName,'.txt','')
-logFileName = strcat(stimPath,subjID,'_',stimFilePrefix,'.log') %%logs events in same directory as stimulus file
-recFileName = strcat(stimPath,subjID,'_',stimFilePrefix,'.rec')  %%logs recording parameters in same directory as stimulus file
+exptFilePrefix = strrep(exptFileName,'.txt','')
+logFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.log') %%logs events in same directory as stimulus file
+recFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.rec')  %%logs recording parameters in same directory as stimulus file
 
 %%% Create log files
 
@@ -78,17 +78,62 @@ paramFileNameAndPath = strcat(paramPath,paramFileName)
 
 %ReadStimulusFile is a special function for reading in stim list. 
 %Defined at end of this script
-stimFileNameAndPath = strcat(stimPath,stimFileName)
-[stimulusMatrix,triggerMatrix, questionList] = ReadStimulusFile(stimFileNameAndPath) 
-numItems = length(stimulusMatrix);
-logData = zeros(numItems,10);
+exptFileNameAndPath = strcat(exptPath,exptFileName)
+expt = ReadExptFile(exptFileName,exptPath)
+
+%[stimulusMatrix,triggerMatrix, questionList] = ReadStimulusFile(exptFileNameAndPath) 
+%numItems = length(stimulusMatrix);
+%logData = zeros(numItems,10);
 
 %WriteRecFile is a special function for writing out the recording
 %parameters.
 %Defined at end of script
-WriteRecFile(recFileName,exPar,subjID, stimFileNameAndPath,paramFileNameAndPath);
+WriteRecFile(recFileName,exPar,subjID, exptFileNameAndPath,paramFileNameAndPath);
 
+%runExperiment(expt)
 
+end
+
+function expt = ReadExptFile(exptFileName,exptPath)
+    exptFileNameAndPath = strcat(exptPath,exptFileName)
+    fprintf('Reading experiment file at:\n');
+    fprintf('%s\n',exptFileNameAndPath);
+    expt = {};
+    exptFiles = {};
+    fid = fopen(exptFileNameAndPath, 'r')
+    if fid == -1
+        error('Cannot open experiment file.')
+    end
+    textLine = fgetl(fid);  %fgetl reads a single line from a file
+    ii = 1;
+
+    %right now can be no blank lines -- that is a problem!
+    while (-1 ~= textLine)
+        C = textscan(textLine, '%q %d'); %use textscan to separate it
+        ii;
+        exptFiles{ii} = strcat(textLine)
+        ii = ii + 1;
+        textLine = fgetl(fid);      
+    end
+    
+    fclose(fid);
+    nFiles = length(exptFiles)
+    for ii = 1:nFiles
+        currFileNameAndPath = strcat(exptPath,exptFiles{ii})
+        fid = fopen(currFileNameAndPath, 'r')
+        while fid == -1
+            prompt = horzcat('Set filename for ',exptFiles{ii},': ')
+            exptFiles{ii} = input(prompt, 's');
+            currFileNameAndPath = strcat(exptPath,exptFiles{ii})
+            fid = fopen(currFileNameAndPath, 'r')
+        end
+        expt = ReadExptSubFile(currFileNameAndPath,expt);
+        fclose(fid);
+    end
+
+end
+
+function runExperiment(expt)
 % Grab a time baseline for the entire experiment and send a trigger to log
 
 baseTime = GetSecs()
@@ -206,45 +251,88 @@ for i = 1:numItems
 end
 
 sca
-
 end
 
 
 
-function [stimulusMatrix, triggerMatrix, questionList] = ReadStimulusFile(stimFile)
-    fprintf('Reading stimulus file at:\n');
-    fprintf('%s\n',stimFile);
-    stimulusMatrix = [];
-    triggerMatrix = [];
-    questionList = {};
-    fid = fopen(stimFile, 'r')
+function expt = ReadExptSubFile(exptFile,expt)
+    fprintf('Reading file at:\n');
+    fprintf('%s\n',exptFile);
+    currblock = InitBlock;
+    fid = fopen(exptFile, 'r')
     textLine = fgetl(fid);  %fgetl reads a single line from a file
     ii = 1;
-
+   %right now can be no blank lines -- that is a problem!
     while (-1 ~= textLine)
         C = textscan(textLine, '%q %d'); %use textscan to separate it
-        ii;
-        numStim = length(C{1});
-        
-        for jj = 1:numStim        
-            if strcmp(C{1}{jj},'?') 
-                questionList{ii} = C{1}{jj+1};
-                break
+        ii
+        numStim = length(C{1})
+        if strcmp(C{1}{1},'<textslide>')
+            fprintf('textslide identified\n');
+            if (ii > 1)
+                expt{1,length(expt)+1} = currblock;
+                currblock = InitBlock;
             end
+            expt{1,length(expt)+1} = ReadTextSlide(textLine,fid);
+            fprintf('textslide should be added\n');
+        else
+          fprintf('not a text slide');
+          if (numStim < 1)
+                fprintf('no tokens identified\n');
+                continue;
+          end
+          
+          for jj = 1:numStim        
+              if strcmp(C{1}{jj},'?') 
+                     currblock.questionList{ii} = C{1}{jj+1};
+                     fprintf('added a question\n');
+                  break
+              end
             
-            stimulusMatrix{ii}{jj} = C{1}{jj};
-            triggerMatrix{ii}{jj} = C{2}(jj);
-        end
+              currblock.stimulusMatrix{ii}{jj} = C{1}{jj};
+              currblock.triggerMatrix{ii}{jj} = C{2}(jj);
+              fprintf('added a stimulus and trigger\n');
+          end
         
-        if ~strcmp(C{1}{jj}, '?')  %%if there's a question, the last thing in C should be '?'
-            questionList{ii} = []  %%if no question, create an empty cell as a place holder
+          if ~strcmp(C{1}{jj}, '?')  %%if there's a question, the last thing in C should be '?'
+              currblock.questionList{ii} = []  %%if no question, create an empty cell as a place holder
+          end
         end
         ii = ii + 1;
-        textLine = fgetl(fid);      
+        textLine = fgetl(fid);   
     end
     
+    expt{1,length(expt)+1} = currblock;
+    fprintf('currblock added\n');
     fclose(fid);
+end
+        
+function currblock = InitBlock
+    currblock = block;
+    currblock.stimulusMatrix = []
+    currblock.triggerMatrix = []
+    currblock.questionList = {}
+end
  
+function textslide = ReadTextSlide(textLine,fid)
+    textslide = []
+    ii = 1
+    %right now can be no blank lines -- that is a problem!
+    while (-1 ~= textLine)
+        fprintf('%s\n',textLine);
+         C = textscan(textLine,'%q');
+         if strcmp(C{1}{1},'<textslide>')
+             textLine = fgetl(fid);
+             continue
+         end
+         if strcmp(C{1}{1},'</textslide>')
+             break;
+         else
+             textslide{ii} = textLine;
+         end
+         textLine = fgetl(fid);
+         ii = ii + 1;
+    end
 end
 
 function WriteLogFile(logFileName,timeToLog,currentWord,currentTrigger)
@@ -292,13 +380,13 @@ fclose(fid);
 
 end
 
-function WriteRecFile (recFileName,exPar,subjID, stimFileNameAndPath,paramFileNameAndPath)
+function WriteRecFile (recFileName,exPar,subjID, exptFileNameAndPath,paramFileNameAndPath)
 fid = fopen(recFileName,'a');
 if fid == -1
     error('Can not write to rec file.')
 end
 fmt = '%s\t%s\n';
-fprintf(fid,fmt,'Experiment File:',stimFileNameAndPath);
+fprintf(fid,fmt,'Experiment File:',exptFileNameAndPath);
 fprintf(fid,fmt,'Parameter File:',paramFileNameAndPath);
 fprintf(fid,fmt,'Date:',datestr(now));
 fprintf(fid,fmt,'Subject ID:',subjID);
