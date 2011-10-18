@@ -60,12 +60,12 @@ DaqDOut(par.di,1,0); % this zeros out the trigger line to get started
 
 %subjID = input('Enter subject ID: ', 's');
 exptFilePrefix = strrep(exptFileName,'.txt','')
-logFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.log') %%logs events in same par.directory as stimulus file
+par.logFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.log') %%logs events in same par.directory as stimulus file
 recFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.rec')  %%logs recorpar.ding parameters in same par.directory as stimulus file
 
 %%% Create log files
 
-fid = fopen(logFileName,'w');
+fid = fopen(par.logFileName,'w');
 if fid == -1
     error('Cannot write to log file.')
 end
@@ -98,9 +98,7 @@ expt = ReadExptFile(exptFileName,exptPath);
 %Defined at end of script
 WriteRecFile(recFileName,par,subjID, exptFileNameAndPath,paramFileNameAndPath);
 
-results = runExperiment(expt,par)
-
-WriteLogFile(results,logFileName)
+RunExperiment(expt,par)
 
 end
 
@@ -200,10 +198,8 @@ end
         
 
 
-function results = runExperiment(expt,par)
-results.times = []
-results.words = {}
-results.triggers = {}
+function RunExperiment(expt,par)
+
 % Grab a time baseline for the entire experiment and send a trigger to log
 
 baseTime = GetSecs()
@@ -224,10 +220,10 @@ for i = 1:length(expt)
     curritem = expt{i}
     if (strcmp(class(curritem),'block'))
         
-        results = runBlock(curritem,par,results);
+        RunBlock(curritem,par);
         
     else
-        runTextSlide(curritem,par);
+        RunTextSlide(curritem,par);
     end
     
 end
@@ -235,17 +231,24 @@ end
 sca
 end
 
-function runTextSlide(currTextSlide,par)
+function results = InitResults
+results.times = []
+results.words = {}
+results.triggers = {}
+end
+
+
+function RunTextSlide(currTextSlide,par)
 Screen('TextSize',par.wPtr,par.textSize);
 DrawFormattedText(par.wPtr,currTextSlide,'center','center',WhiteIndex(par.wPtr));
 Screen('Flip',par.wPtr);
 KbStrokeWait
 end
 
-function results = runBlock(currblock,par,results)
+function RunBlock(currblock,par)
 numItems = length(currblock.stimulusMatrix)
 for i = 1:numItems
-    
+    results = InitResults
     currentItem = currblock.stimulusMatrix{i};  %This is the current item being presented
     currentItemTriggerList = currblock.triggerMatrix{i}; %This is the current list of triggers for that item
     numWords = length(currentItem);    
@@ -261,7 +264,8 @@ for i = 1:numItems
     Screen('Flip',par.wPtr);
     WaitSecs(par.IFI);
     for w = 1: numWords %This is the loop where we present the whole item
-        currentWord = currentItem{w};
+        w
+        currentWord = currentItem{w}
         currentTrigger = currentItemTriggerList{w};
         
         Screen('TextSize',par.wPtr,par.textSize);%
@@ -345,32 +349,37 @@ for i = 1:numItems
             %WriteLogFile(logFileName, reactionTime, response, 254);
         end
         
-             
+            
     end
     
     %%%Wait for button press to proceed
     Screen('FillRect',par.wPtr,par.black);
     Screen('DrawingFinished',par.wPtr);
     Screen(par.wPtr,'Flip');
- 
+    
+    WriteLogFile(results,par.logFileName)
+    
     KbStrokeWait
 
-    
 end
 
 end
 
 function results = UpdateResults(results, timeToLog, currentWord, currentTriggers)
-    if (length(results.times)<1)
-        results.times{1} = timeToLog;
-        results.words{1} = currentWord;
-        results.triggers{1} = currentTriggers;
+    
+   results.times = AddEntry(results.times,timeToLog)
+   results.words = AddEntry(results.words,currentWord)
+   results.triggers = AddEntry(results.triggers,currentTriggers)
+end
+
+function list = AddEntry(list,entry)
+    if (length(list)<1)
+        list{1} = entry;
     else
-        results.times{length(results.times)+1} = timeToLog;
-        results.words{length(results.times)+1} = currentWord;
-        results.triggers{length(results.triggers)+1} = currentTriggers;
+        list{length(list)+1} = entry;
     end
 end
+
  
 function currblock = InitBlock
     currblock = block;
@@ -408,16 +417,17 @@ function textslide = ReadTextSlide(textLine,fid)
 end
 
 function WriteLogFile(results,logFileName)
+fprintf('printing results line')
 fid = fopen(logFileName,'a');
 while(fid == -1)
     logFileName = input('There was an error opening the log file.  Please reenter the log filename:', 's');
     fid = fopen(logFileName,'a');
 end
 
-fmt = '%.3f\t%s\t%i\n';
+fmt = '%.3f\t%s\t%s\n';
 for (i = 1:length(results.times))
-    currentTriggers = TriggerListToString(results.triggers{i})
-    fprintf(fid,fmt,results.times{i},results.words{i},currentTriggers);
+   currentTriggers = TriggerListToString(results.triggers{i})
+   fprintf(fid,fmt,results.times{i},results.words{i},currentTriggers);
 end
 fclose(fid);
 
@@ -428,10 +438,10 @@ function triggerString = TriggerListToString(triggerList)
         triggerString = 'no triggers sent'
         return
     end
-    triggerString = triggerList(1)
+    triggerString = int2str(triggerList(1))
     if (length(triggerList)>1)
          for (i = 2:length(triggerList))
-                triggerString = strcat(triggerString,', ',triggerList(i))
+                triggerString = strcat(triggerString,', ',int2str(triggerList(i)))
          end
     end
 end
