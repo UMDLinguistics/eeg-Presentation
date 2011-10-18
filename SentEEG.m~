@@ -143,9 +143,66 @@ function expt = ReadExptFile(exptFileName,exptPath)
 
 end
 
+function expt = ReadExptSubFile(exptFile,expt)
+    fprintf('Reapar.ding file at:\n');
+    fprintf('%s\n',exptFile);
+    currblock = InitBlock;
+    fid = fopen(exptFile, 'r')
+    textLine = fgets(fid);  %fgetl reads a single line from a file
+    ii = 1;
+   %with fget1 can be no blank lines -- that is a problem!
+    while (-1 ~= textLine)
+        C = textscan(textLine, '%q %d'); %use textscan to separate it
+        ii
+        numStim = length(C{1})
+        if (numStim == 0)
+            fprintf('there is a blank line')
+            textLine = fgets(fid); 
+            continue
+        end
+        if strcmp(C{1}{1},'<textslide>')
+            fprintf('textslide identified\n');
+            if (ii > 1)
+                expt{1,length(expt)+1} = currblock;
+                currblock = InitBlock;
+            end
+            expt{1,length(expt)+1} = ReadTextSlide(textLine,fid);
+            fprintf('textslide should be added\n');
+        else
+          fprintf('not a text slide\n');
+
+          for jj = 1:numStim        
+              if strcmp(C{1}{jj},'?') 
+                     currblock.questionTriggers{ii} = C{2}(jj);
+                     currblock.questionList{ii} = C{1}{jj+1};
+                     fprintf('added a question and question trigger\n');
+                  break
+              end
+            
+              currblock.stimulusMatrix{ii}{jj} = C{1}{jj};
+              currblock.triggerMatrix{ii}{jj} = C{2}(jj);
+              fprintf('added a stimulus and trigger\n');
+          end
+        
+          if ~strcmp(C{1}{jj}, '?')  %%if there's a question, the last thing accessed in C should be '?'
+              currblock.questionList{ii} = []  %%if no question, create an empty cell as a place holder
+              currblock.questionTriggers{ii} = [] %ditto for the question triggers
+          end
+          ii = ii + 1;
+        end
+        textLine = fgets(fid);   
+    end
+    
+    expt{1,length(expt)+1} = currblock;
+    fprintf('currblock added\n');
+    fclose(fid);
+end
+        
+
+
 function results = runExperiment(expt,par)
 results.times = []
-results.stimuli = []
+results.words = {}
 results.triggers = {}
 % Grab a time baseline for the entire experiment and send a trigger to log
 
@@ -226,20 +283,27 @@ for i = 1:numItems
         % Log this trial
         %Change this so that ONLY write to files AFTER the experiment is
         %done!  That way won't mess with the experimental timing
-        results = UpdateResults(results,timeToLog, currentWord, currentTrigger);
         %WriteLogFile(logFileName, timeToLog, currentWord, currentTrigger);
+        currentTriggers = [currentTrigger]
+        results = UpdateResults(results,timeToLog, currentWord, currentTriggers);
+        
     end
     
     currentQuestion = currblock.questionList{i}
 
     if ~isempty(currentQuestion)
-        
+        currQuestionTrigger = currblock.questionTriggers{i}
         WaitSecs(par.IQI);
         DrawFormattedText(par.wPtr,currentQuestion,'center','center',WhiteIndex(par.wPtr));
         Screen('DrawingFinished',par.wPtr);
-        timeToLog= Screen('Flip',par.wPtr);  
+        timeToLog= Screen('Flip',par.wPtr);
+        %Output trigger to show a question was presented
         DaqDOut(par.di,1,par.questionTrigger);
         DaqDOut(par.di,1,0);
+        %Output trigger for that specific question
+        DaqDOut(par.di,1,currQuestionTrigger);
+        DaqDOut(par.di,1,0);
+        currentTriggers = [par.questionTrigger, currQuestionTrigger];
         
         % Make timeToLog the actual time the subject saw stimuli, if
         % necessary or desirable to do so (may need to change code)
@@ -247,6 +311,7 @@ for i = 1:numItems
         % Log the presentation of the response screen
         %Change this so that ONLY write to files AFTER the experiment is
         %done!  That way won't mess with the experimental timing
+        results = UpdateResults(results,timeToLog, '?', currentTriggers);
         %WriteLogFile(logFileName, timeToLog, '?', par.questionTrigger);
 
         
@@ -266,6 +331,8 @@ for i = 1:numItems
             DaqDOut(par.di,1,par.button1Trigger);
             DaqDOut(par.di,1,0);
             response = 'f'; 
+            currentTriggers = [par.button1Trigger]
+            results = UpdateResults(results,reactionTime, response, currentTriggers);
             %WriteLogFile(logFileName, reactionTime, response, 253);
         end
         
@@ -273,6 +340,8 @@ for i = 1:numItems
             DaqDOut(par.di,1,par.button2Trigger);
             DaqDOut(par.di,1,0);
             response = 'j'; 
+            currentTriggers = [par.button2Trigger]
+            results = UpdateResults(results,reactionTime, response, currentTriggers);
             %WriteLogFile(logFileName, reactionTime, response, 254);
         end
         
@@ -291,70 +360,22 @@ end
 
 end
 
-function results = UpdateResults(results, timeToLog, currentWord, currentTrigger)
-results.times{length(results.times)+1} = timeToLog;
+function results = UpdateResults(results, timeToLog, currentWord, currentTriggers)
+if (length(results.times)<1)
+    results.times{1} = timeToLog;
+else
+    results.times{length(results.times)+1} = timeToLog;
+end
+if
 results.words{length(results.times)+1} = currentWord;
-results.triggers = 
+results.triggers{1,length(results.triggers)+1} = currentTriggers;
 end
-
-function expt = ReadExptSubFile(exptFile,expt)
-    fprintf('Reapar.ding file at:\n');
-    fprintf('%s\n',exptFile);
-    currblock = InitBlock;
-    fid = fopen(exptFile, 'r')
-    textLine = fgets(fid);  %fgetl reads a single line from a file
-    ii = 1;
-   %with fget1 can be no blank lines -- that is a problem!
-    while (-1 ~= textLine)
-        C = textscan(textLine, '%q %d'); %use textscan to separate it
-        ii
-        numStim = length(C{1})
-        if (numStim == 0)
-            fprintf('there is a blank line')
-            textLine = fgets(fid); 
-            continue
-        end
-        if strcmp(C{1}{1},'<textslide>')
-            fprintf('textslide identified\n');
-            if (ii > 1)
-                expt{1,length(expt)+1} = currblock;
-                currblock = InitBlock;
-            end
-            expt{1,length(expt)+1} = ReadTextSlide(textLine,fid);
-            fprintf('textslide should be added\n');
-        else
-          fprintf('not a text slide\n');
-
-          for jj = 1:numStim        
-              if strcmp(C{1}{jj},'?') 
-                     currblock.questionList{ii} = C{1}{jj+1};
-                     fprintf('added a question\n');
-                  break
-              end
-            
-              currblock.stimulusMatrix{ii}{jj} = C{1}{jj};
-              currblock.triggerMatrix{ii}{jj} = C{2}(jj);
-              fprintf('added a stimulus and trigger\n');
-          end
-        
-          if ~strcmp(C{1}{jj}, '?')  %%if there's a question, the last thing in C should be '?'
-              currblock.questionList{ii} = []  %%if no question, create an empty cell as a place holder
-          end
-          ii = ii + 1;
-        end
-        textLine = fgets(fid);   
-    end
-    
-    expt{1,length(expt)+1} = currblock;
-    fprintf('currblock added\n');
-    fclose(fid);
-end
-        
 function currblock = InitBlock
     currblock = block;
     currblock.stimulusMatrix = []
     currblock.triggerMatrix = []
     currblock.questionList = {}
+    currblock.questionTriggers = {}
 end
  
 function textslide = ReadTextSlide(textLine,fid)
@@ -385,6 +406,32 @@ function textslide = ReadTextSlide(textLine,fid)
 end
 
 function WriteLogFile(results,logFileName)
+fid = fopen(logFileName,'a');
+while(fid == -1)
+    logFileName = input('There was an error opening the log file.  Please reenter the log filename:', 's');
+    fid = fopen(logFileName,'a');
+end
+
+fmt = '%.3f\t%s\t%i\n';
+for (i = 1:length(results.times))
+    currentTriggers = TriggerListToString(results.triggers{i})
+    fprintf(fid,fmt,results.times{i},results.words{i},currentTriggers);
+end
+fclose(fid);
+
+end
+
+function triggerString = TriggerListToString(triggerList)
+    if(length(triggerList) < 1)
+        triggerString = 'no triggers sent'
+        return
+    end
+    triggerString = triggerList(1)
+    if (length(triggerList)>1)
+         for (i = 2:length(triggerList))
+                triggerString = strcat(triggerString,', ',triggerList(i))
+         end
+    end
 end
 
 function WriteLogFileOld(logFileName,timeToLog,currentWord,currentTrigger)
