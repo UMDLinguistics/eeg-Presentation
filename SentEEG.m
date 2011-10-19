@@ -44,6 +44,8 @@ par.button1 = KbName('f');
 par.button1Trigger = 251;
 par.button2 = KbName('j');
 par.button2Trigger = 252;
+par.moveOnButton = KbName('ENTER')
+par.moveOnTrigger = 250
 
 %%% Configure the data acquisition device
 
@@ -320,6 +322,7 @@ for i = 1:numItems
 
         
         beg = GetSecs()
+        %Is this right???
         absTime = beg + par.qDuration;                    
         [keyDetect, reactionTime, keyCode] = KbCheck(-1);
         while ~ (keyCode(par.button1) |  keyCode(par.button2))
@@ -331,23 +334,9 @@ for i = 1:numItems
         reactionTime
        
        % Log the button press itself, if it happened
-        if keyCode(par.button1)    
-            DaqDOut(par.di,1,par.button1Trigger);
-            DaqDOut(par.di,1,0);
-            response = 'f'; 
-            currentTriggers = [par.button1Trigger]
-            results = UpdateResults(results,reactionTime, response, currentTriggers);
-            %WriteLogFile(logFileName, reactionTime, response, 253);
-        end
-        
-        if keyCode(par.button2)
-            DaqDOut(par.di,1,par.button2Trigger);
-            DaqDOut(par.di,1,0);
-            response = 'j'; 
-            currentTriggers = [par.button2Trigger]
-            results = UpdateResults(results,reactionTime, response, currentTriggers);
-            %WriteLogFile(logFileName, reactionTime, response, 254);
-        end
+       
+       RecordButtonPress(results,par,par.button1,par.button1Trigger,reactionTime)
+       RecordButtonPress(results,par,par.button2,par.button2Trigger,reactionTime)
         
             
     end
@@ -362,6 +351,21 @@ for i = 1:numItems
     KbStrokeWait
 
 end
+
+end
+
+function results = RecordButtonPress(results,par,button,buttonTrigger,reactionTime)
+
+    if keyCode(button)    
+            DaqDOut(par.di,1,buttonTrigger);
+            DaqDOut(par.di,1,0);
+            response = KbName(button); 
+            currentTriggers = [buttonTrigger]
+            results = UpdateResults(results,reactionTime, response, currentTriggers);
+    end
+end
+
+function [reactionTime, keyCode] = GetButtonPress(buttons)
 
 end
 
@@ -457,6 +461,29 @@ fmt = '%.3f\t%s\t%i\n';
 fprintf(fid,fmt,timeToLog,currentWord,currentTrigger);
 
 fclose(fid);
+
+end
+
+
+
+function par = ReadParameterFileNew(paramFileName, par)
+fid = fopen(paramFileName,'rt');
+
+if (-1 == fid)
+    error('Could not open experiment parameters file.')
+end
+
+textLine = fgetl(fid);
+while (-1 ~= textLine)
+    %comments in the parameter file are on lines starting with '#'
+    if(textLine(1)=='#')
+        textLine = fgetl(fid);
+        continue
+    end
+    fxnToEval = strcat('par.',textLine);
+    eval(fxnToEval);
+    textLine = fgetl(fid);
+end
 
 end
 

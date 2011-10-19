@@ -44,6 +44,8 @@ par.button1 = KbName('f');
 par.button1Trigger = 251;
 par.button2 = KbName('j');
 par.button2Trigger = 252;
+par.moveOnButton = KbName('ENTER')
+par.moveOnTrigger = 250
 
 %%% Configure the data acquisition device
 
@@ -320,6 +322,7 @@ for i = 1:numItems
 
         
         beg = GetSecs()
+        %Is this right???
         absTime = beg + par.qDuration;                    
         [keyDetect, reactionTime, keyCode] = KbCheck(-1);
         while ~ (keyCode(par.button1) |  keyCode(par.button2))
@@ -331,23 +334,9 @@ for i = 1:numItems
         reactionTime
        
        % Log the button press itself, if it happened
-        if keyCode(par.button1)    
-            DaqDOut(par.di,1,par.button1Trigger);
-            DaqDOut(par.di,1,0);
-            response = 'f'; 
-            currentTriggers = [par.button1Trigger]
-            results = UpdateResults(results,reactionTime, response, currentTriggers);
-            %WriteLogFile(logFileName, reactionTime, response, 253);
-        end
-        
-        if keyCode(par.button2)
-            DaqDOut(par.di,1,par.button2Trigger);
-            DaqDOut(par.di,1,0);
-            response = 'j'; 
-            currentTriggers = [par.button2Trigger]
-            results = UpdateResults(results,reactionTime, response, currentTriggers);
-            %WriteLogFile(logFileName, reactionTime, response, 254);
-        end
+       
+       RecordButtonPress(results,par,par.button1,par.button1Trigger,reactionTime)
+       RecordButtonPress(results,par,par.button2,par.button2Trigger,reactionTime)
         
             
     end
@@ -365,32 +354,31 @@ end
 
 end
 
+function results = RecordButtonPress(results,par,button,buttonTrigger,reactionTime)
+
+    if keyCode(button)    
+            DaqDOut(par.di,1,buttonTrigger);
+            DaqDOut(par.di,1,0);
+            response = KbName(button); 
+            currentTriggers = [buttonTrigger]
+            results = UpdateResults(results,reactionTime, response, currentTriggers);
+    end
+end
+
+function [reactionTime, keyCode
+
 function results = UpdateResults(results, timeToLog, currentWord, currentTriggers)
     
-    if (length(results.times)<1)
-        results.times{1} = timeToLog;
-    else
-        length(results.times)+1} = timeToLog;
-    end
-    
-    if (length(results.words)<1)
-        results.words{1} = currentWord;
-    else
-        length(results.words)+1} = currentWord;
-    end
-    
-    if (length(results.triggers)<1)
-        results.triggers{1} = currentTriggers;
-    else
-        length(results.triggers)+1} = currentTriggers;
-    end
+   results.times = AddEntry(results.times,timeToLog)
+   results.words = AddEntry(results.words,currentWord)
+   results.triggers = AddEntry(results.triggers,currentTriggers)
 end
 
 function list = AddEntry(list,entry)
     if (length(list)<1)
-        list{1} = timeToLog;
+        list{1} = entry;
     else
-        length(results.times)+1} = timeToLog;
+        list{length(list)+1} = entry;
     end
 end
 
@@ -438,13 +426,10 @@ while(fid == -1)
     fid = fopen(logFileName,'a');
 end
 
-fmt = '%.3f\t%s\t%i\n';
+fmt = '%.3f\t%s\t%s\n';
 for (i = 1:length(results.times))
    currentTriggers = TriggerListToString(results.triggers{i})
-   results.times{i}
-   results.words{i}
-   currentTriggers
-    fprintf(fid,fmt,results.times{i},results.words{i},currentTriggers);
+   fprintf(fid,fmt,results.times{i},results.words{i},currentTriggers);
 end
 fclose(fid);
 
@@ -455,10 +440,10 @@ function triggerString = TriggerListToString(triggerList)
         triggerString = 'no triggers sent'
         return
     end
-    triggerString = triggerList(1)
+    triggerString = int2str(triggerList(1))
     if (length(triggerList)>1)
          for (i = 2:length(triggerList))
-                triggerString = strcat(triggerString,', ',triggerList(i))
+                triggerString = strcat(triggerString,', ',int2str(triggerList(i)))
          end
     end
 end
@@ -474,6 +459,29 @@ fmt = '%.3f\t%s\t%i\n';
 fprintf(fid,fmt,timeToLog,currentWord,currentTrigger);
 
 fclose(fid);
+
+end
+
+
+
+function par = ReadParameterFileNew(paramFileName, par)
+fid = fopen(paramFileName,'rt');
+
+if (-1 == fid)
+    error('Could not open experiment parameters file.')
+end
+
+textLine = fgetl(fid);
+while (-1 ~= textLine)
+    %comments in the parameter file are on lines starting with '#'
+    if(textLine(1)=='#')
+        textLine = fgetl(fid);
+        continue
+    end
+    fxnToEval = strcat('par.',textLine);
+    eval(fxnToEval);
+    textLine = fgetl(fid);
+end
 
 end
 
