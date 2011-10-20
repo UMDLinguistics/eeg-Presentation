@@ -320,23 +320,12 @@ for i = 1:numItems
         results = UpdateResults(results,timeToLog, '?', currentTriggers);
         %WriteLogFile(logFileName, timeToLog, '?', par.questionTrigger);
 
-        
-        beg = GetSecs()
-        %Is this right???
-        absTime = beg + par.qDuration;                    
-        [keyDetect, reactionTime, keyCode] = KbCheck(-1);
-        while ~ (keyCode(par.button1) |  keyCode(par.button2))
-            [keyDetect,reactionTime,keyCode] = KbCheck(-1);
-            if GetSecs() > absTime
-                break;
-            end
-        end
-        reactionTime
+        [reactionTime, keyCode] = GetButtonPress([par.button1,par.button2],par)
        
        % Log the button press itself, if it happened
        
-       RecordButtonPress(results,par,par.button1,par.button1Trigger,reactionTime)
-       RecordButtonPress(results,par,par.button2,par.button2Trigger,reactionTime)
+       RecordButtonPress(results,par,keyCode,par.button1,par.button1Trigger,reactionTime)
+       RecordButtonPress(results,par,keyCode,par.button2,par.button2Trigger,reactionTime)
         
             
     end
@@ -354,7 +343,29 @@ end
 
 end
 
-function results = RecordButtonPress(results,par,button,buttonTrigger,reactionTime)
+
+function [reactionTime, keyCode] = GetButtonPress(buttons,par)
+        beg = GetSecs()
+        %Is this right???
+        absTime = beg + par.qDuration;                    
+        [keyDetect, reactionTime, keyCode] = KbCheck(-1);
+        while (true)
+            for (i = 1:length(buttons))
+                buttons(i)
+                keyCode(buttons(i))
+                if keyCode(buttons(i))
+                    break;
+                end
+            end
+            [keyDetect,reactionTime,keyCode] = KbCheck(-1);
+            if GetSecs() > absTime
+                break;
+            end
+        end
+        reactionTime
+end
+
+function results = RecordButtonPress(results,par,keyCode,button,buttonTrigger,reactionTime)
 
     if keyCode(button)    
             DaqDOut(par.di,1,buttonTrigger);
@@ -365,9 +376,6 @@ function results = RecordButtonPress(results,par,button,buttonTrigger,reactionTi
     end
 end
 
-function [reactionTime, keyCode] = GetButtonPress(buttons)
-
-end
 
 function results = UpdateResults(results, timeToLog, currentWord, currentTriggers)
     
