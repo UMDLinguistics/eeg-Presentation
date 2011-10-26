@@ -1,4 +1,4 @@
-function expt = SentEEG() %temporarily outputing experiment cell array for testing purposes only
+function par = SentEEG() %temporarily outputing experiment cell array for testing purposes only
 
 %%Basic script for presenting EEG sentence study
 %%First version 6/3/11 Ellen Lau
@@ -44,7 +44,7 @@ par.button1 = KbName('f');
 par.button1Trigger = 251;
 par.button2 = KbName('j');
 par.button2Trigger = 252;
-par.moveOnButton = KbName('ENTER');
+par.moveOnButton = KbName('space');
 par.moveOnTrigger = 250;
 
 %%% Configure the data acquisition device
@@ -55,9 +55,6 @@ DaqDOut(par.di,1,0); % this zeros out the trigger line to get started
 
 %%% Call functions that take a while to load the first time
 KbCheck;
-
-
-
 
 %%% Initialize file names
 %%% Select parameter file
@@ -89,7 +86,6 @@ fclose(fid);
 %Defined at end of script
 paramFileNameAndPath = strcat(paramPath,paramFileName);
 par = ReadParameterFile(paramFileNameAndPath,par);
-%par.toString
 
 %ReadStimulusFile is a special function for reapar.ding in stim list. 
 %Defined at end of this script
@@ -105,7 +101,7 @@ expt = ReadExptFile(exptFileName,exptPath);
 %Defined at end of script
 WriteRecFile(recFileName,par,subjID, exptFileNameAndPath,paramFileNameAndPath);
 
-%%RunExperiment(expt,par);
+RunExperiment(expt,par);
 
 end
 
@@ -247,7 +243,9 @@ function RunTextSlide(currTextSlide,par)
 Screen('TextSize',par.wPtr,par.textSize);
 DrawFormattedText(par.wPtr,currTextSlide,'center','center',WhiteIndex(par.wPtr));
 Screen('Flip',par.wPtr);
-KbStrokeWait;
+%right now the button press to move on from the textslide is not
+%recorded. should it be?
+GetButtonPress([par.moveOnButton],[par.moveOnTrigger],par,0);
 end
 
 function RunBlock(currblock,par)
@@ -322,12 +320,16 @@ for i = 1:numItems
         results = UpdateResults(results,timeToLog, '?', currentTriggers);
         %WriteLogFile(logFileName, timeToLog, '?', par.questionTrigger);
 
-        [reactionTime, keyCode] = GetButtonPress([par.button1,par.button2],par);
+        [reactionTime, button, buttonTrigger] = GetButtonPress([par.button1,par.button2],[par.button1Trigger,par.button2Trigger],par,1)
        
-       % Log the button press itself, if it happened
-       
-       RecordButtonPress(results,par,keyCode,par.button1,par.button1Trigger,reactionTime);
-       RecordButtonPress(results,par,keyCode,par.button2,par.button2Trigger,reactionTime);
+       % Log the button press itself, if it happened. -1 means the subject
+       % did not hit one of the button choices during the allotted time.
+       if(button~=-1)
+           button = KbName(button);
+       else
+           button = 'no_response';
+       end
+       results = UpdateResults(results,reactionTime, button, [buttonTrigger]);
             
     end
     
@@ -338,43 +340,51 @@ for i = 1:numItems
     
     WriteLogFile(results,par.logFileName);
     
-    KbStrokeWait;
+    %right now the button press to move on to next stimulus is not
+    %recorded. should it be?
+    GetButtonPress([par.moveOnButton],[par.moveOnTrigger],par,0);
 
 end
 
 end
 
 
-function [reactionTime, keyCode] = GetButtonPress(buttons,par)
+function [reactionTime, button, buttonTrigger] = GetButtonPress(buttons,buttonTriggers,par,timed)
         beg = GetSecs();
         %Is this right???
         absTime = beg + par.qDuration;                    
-        [keyDetect, reactionTime, keyCode] = KbCheck(-1);
-        while (true)
+        flag = 0;
+        button = -1;
+        buttonTrigger = -1;
+        while (true);
+            [keyDetect,reactionTime,keyCode] = KbCheck(-1);
+            %is there a faster way to compare each button??  Can we do this
+            %simultaneously for all buttons??
             for (i = 1:length(buttons));
-                buttons(i)
-                keyCode(buttons(i))
-                if keyCode(buttons(i));
+                if (keyCode(buttons(i)));
+                    DaqDOut(par.di,1,buttonTriggers(i));
+                    DaqDOut(par.di,1,0);
+                    button = buttons(i)
+                    buttonTrigger = buttonTriggers(i)
+                    flag = 1;
                     break;
                 end
             end
-            [keyDetect,reactionTime,keyCode] = KbCheck(-1);
-            if GetSecs() > absTime
+            if (flag == 1);
+                break;
+            end
+            
+            if (timed && GetSecs() > absTime);
                 break;
             end
         end
-        reactionTime
 end
 
-function results = RecordButtonPress(results,par,keyCode,button,buttonTrigger,reactionTime)
 
-    if keyCode(button)    
-            DaqDOut(par.di,1,buttonTrigger);
-            DaqDOut(par.di,1,0);
-            response = KbName(button); 
-            currentTriggers = [buttonTrigger];
-            results = UpdateResults(results,reactionTime, response, currentTriggers);
-    end
+%this is a useless function... delete?
+function results = RecordButtonPress(results,button,buttonTrigger,reactionTime)
+   results = UpdateResults(results,reactionTime, KbName(button), [buttonTrigger]);
+
 end
 
 
@@ -471,33 +481,36 @@ fclose(fid);
 
 end
 
-
-
 function par = ReadParameterFile(paramFileName, par)
+
 fid = fopen(paramFileName,'rt');
 
 if (-1 == fid)
     error('Could not open experiment parameters file.')
 end
 
-textLine = fgetl(fid);
+textLine = fgets(fid);
+
 while (-1 ~= textLine)
     %comments in the parameter file are on lines starting with '#'
     if(textLine(1)=='#')
-        textLine = fgetl(fid);
+        textLine = fgets(fid);
         continue
     end
-    fxnToEval = strcat('par.',textLine);
-    eval(fxnToEval);
-    textLine = fgetl(fid);
+        fxnToEval = strcat('par.',textLine,';');
+        if (~strcmp(fxnToEval,'par.;'))
+            eval(fxnToEval);
+        end
+    textLine = fgets(fid);
 end
 
-par.toString = ParToString(par)
+par.toString = ParToString(par);
 fprintf(char(par.toString));
+fclose(fid)
 end
 
 function str = ParToString(par)
-str = ''
+str = '';
 par_fields = fieldnames(par);
 nfields = length(par_fields);
 if (nfields < 1)
@@ -512,7 +525,7 @@ if (nfields > 1)
         if(~strcmp(class(value),'string'))
             value = num2str(value);
         end
-        str = strcat(str,'/n',field,': ',value);
+        str = strcat(str,'\n',field,':',value);
     end
 end
 
@@ -553,13 +566,17 @@ fid = fopen(recFileName,'a');
 if fid == -1
     error('Cannot write to rec file.')
 end
-fmt = '%s\t%s\n';
+fmt = '%s%s\n';
 fprintf(fid,fmt,'Experiment File:',exptFileNameAndPath);
 fprintf(fid,fmt,'Parameter File:',paramFileNameAndPath);
 fprintf(fid,fmt,'Date:',datestr(now));
 fprintf(fid,fmt,'Subject ID:',subjID);
-fprintf(fid,fmt,'Parameters: /n',char(par.toString));
-
+fprintf(fid,'%s\n','Parameters:');
+parstrings = regexp(par.toString,'\\n','split');
+for i = 1:length(parstrings{1})
+    fprintf(1,'%s\n',char(parstrings{1}{i}));
+    fprintf(fid,'%s\n',char(parstrings{1}{i}));
+end
 fclose(fid);
 end
 
