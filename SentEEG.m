@@ -1,4 +1,4 @@
-function par = SentEEG() %temporarily outputing experiment cell array for testing purposes only
+function expt = SentEEG() %temporarily outputing experiment cell array for testing purposes only
 
 %%Basic script for presenting EEG sentence study
 %%First version 6/3/11 Ellen Lau
@@ -37,7 +37,7 @@ paramFileName = 'example.par';
 subjID = 'test';
 
 
-%To use in script:
+%Default parameters; can be reset using the parameter file.
 par.beginTrigger = 254;
 par.questionTrigger = 253;
 par.button1 = KbName('f');
@@ -57,13 +57,12 @@ DaqDOut(par.di,1,0); % this zeros out the trigger line to get started
 KbCheck;
 
 %%% Initialize file names
-%%% Select parameter file
+%%% Select experiment and parameter files and enter subject ID.
 %[exptFileName, exptPath] = uigetfile('*.expt', 'Select experiment file',par.default_experimental_folder);
-
 %[paramFileName, paramPath] = uigetfile('*.par', 'Select parameter file',exptPath);
-
 %subjID = input('Enter subject ID: ', 's');
-exptFilePrefix = strrep(exptFileName,'.txt','');
+
+exptFilePrefix = strrep(exptFileName,'.expt','');
 par.logFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.log'); %%logs events in same par.directory as stimulus file
 recFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.rec'); %%logs recorpar.ding parameters in same par.directory as stimulus file
 
@@ -82,26 +81,78 @@ end
 fclose(fid);
 
 
-%ReadParameterFile is a special function for reapar.ding the parameters
-%Defined at end of script
+%ReadParameterFile stores the parameters in the struct 'par'.
 paramFileNameAndPath = strcat(paramPath,paramFileName);
 par = ReadParameterFile(paramFileNameAndPath,par);
 
-%ReadStimulusFile is a special function for reapar.ding in stim list. 
-%Defined at end of this script
+%ReadExptFile returns a struct, 'expt', which stores all the data necessary
+%for running the experiment, besides the parameters.
 exptFileNameAndPath = strcat(exptPath,exptFileName);
 expt = ReadExptFile(exptFileName,exptPath);
 
-%[stimulusMatrix,triggerMatrix, questionList] = ReadStimulusFile(exptFileNameAndPath) 
-%numItems = length(stimulusMatrix);
-%logData = zeros(numItems,10);
-
-%WriteRecFile is a special function for writing out the recorpar.ding
-%parameters.
-%Defined at end of script
+%WriteRecFile writes out the parameters, current time and subjID to record
+%what parameters were used each specific time each experiment was run.
 WriteRecFile(recFileName,par,subjID, exptFileNameAndPath,paramFileNameAndPath);
 
+%Runs the actual experiment, recording subject responses to the log file after
+%every item, where item = a sequence of words with triggers followed by an optional
+%question.
 RunExperiment(expt,par);
+
+end
+
+%Reads the parameter file.  For an example of the format the
+%parameter file should be in, see example.par in the folder 
+%example_experiment on the desktop.
+function par = ReadParameterFile(paramFileName, par)
+
+fid = fopen(paramFileName,'rt');
+
+if (-1 == fid)
+    error('Could not open experiment parameters file.')
+end
+
+textLine = fgets(fid);
+
+while (-1 ~= textLine)
+    %comments in the parameter file are on lines starting with '#'
+    if(textLine(1)=='#')
+        textLine = fgets(fid);
+        continue
+    end
+        fxnToEval = strcat('par.',textLine,';');
+        if (~strcmp(fxnToEval,'par.;'))
+            eval(fxnToEval);
+        end
+    textLine = fgets(fid);
+end
+
+par.toString = ParToString(par);
+fprintf(char(par.toString));
+fclose(fid)
+end
+
+%Returns a string value encoding all the parameters stored in the
+%variable par.
+function str = ParToString(par)
+str = '';
+par_fields = fieldnames(par);
+nfields = length(par_fields);
+if (nfields < 1)
+    fprintf('No parameters were entered! Check the parameter file.');
+    return
+end
+str = par_fields(1);
+if (nfields > 1)
+    for (fieldindex = 2:nfields)
+        field = par_fields(fieldindex);
+        value = eval(strcat('par.',char(field)));
+        if(~strcmp(class(value),'string'))
+            value = num2str(value);
+        end
+        str = strcat(str,'\n',field,':',value);
+    end
+end
 
 end
 
@@ -144,61 +195,109 @@ function expt = ReadExptFile(exptFileName,exptPath)
 end
 
 function expt = ReadExptSubFile(exptFile,expt)
-    fprintf('Reapar.ding file at:\n');
-    fprintf('%s\n',exptFile);
+    %fprintf('Reading file at:\n');
+    %fprintf('%s\n',exptFile);
     currblock = InitBlock;
     fid = fopen(exptFile, 'r');
-    textLine = fgets(fid);  %fgetl reads a single line from a file
-    ii = 1;
-   %with fget1 can be no blank lines -- that is a problem!
+    textLine = fgets(fid);  %fgets reads a single line from a file, keeping new line characters.
+    itemnum = 1;  %The number of the current stimulus item.
     while (-1 ~= textLine)
-        C = textscan(textLine, '%q %d'); %use textscan to separate it
+        C = textscan(textLine, '%q %d'); %use textscan to separate it into 'text' 'number' pairs.
         numStim = length(C{1});
+        
+        %If there is a blank line, skip it and get the next line.
         if (numStim == 0)
-            fprintf('there is a blank line');
+            fprintf('there is a blank line\n');
             textLine = fgets(fid); 
             continue
         end
+        
+        %If the first token in the current line is '<textslide>', 
+        %add the current block of stimuli (if it is not empty) to the experiment,
+        %reset the current block of stimuli, then read in a text slide until you hit '</textslide>'
+        %using ReadTextSlide, and add the textslide to the experiment.
         if strcmp(C{1}{1},'<textslide>')
-            fprintf('textslide identified\n');
-            if (ii > 1)
+            %fprintf('textslide identified\n');
+            if (~BlockEmpty(currblock))
                 expt{1,length(expt)+1} = currblock;
                 currblock = InitBlock;
+                itemnum = 1;
+                fprintf('block added\n');
             end
             expt{1,length(expt)+1} = ReadTextSlide(textLine,fid);
-            fprintf('textslide should be added\n');
+            %fprintf('textslide should be added\n');
+            
+        %Otherwise, treat the current line as a stimulus item and add it to the current
+        %block of stimuli.
         else
-          fprintf('not a text slide\n');
+          %fprintf('not a text slide\n');
 
           for jj = 1:numStim        
               if strcmp(C{1}{jj},'?') 
-                     currblock.questionTriggers{ii} = C{2}(jj);
-                     currblock.questionList{ii} = C{1}{jj+1};
-                     fprintf('added a question and question trigger\n');
+                     currblock.questionTriggers{itemnum} = C{2}(jj);
+                     currblock.questionList{itemnum} = C{1}{jj+1};
+                     %fprintf('added a question and question trigger\n');
                   break
+              else
+                  currblock.questionList{itemnum} = [];  %%if no question, create an empty cell as a place holder
+                  currblock.questionTriggers{itemnum} = []; %ditto for the question triggers
               end
             
-              currblock.stimulusMatrix{ii}{jj} = C{1}{jj};
-              currblock.triggerMatrix{ii}{jj} = C{2}(jj);
-              fprintf('added a stimulus and trigger\n');
+              currblock.stimulusMatrix{itemnum}{jj} = C{1}{jj};
+              currblock.triggerMatrix{itemnum}{jj} = C{2}(jj);
+              %fprintf('added a stimulus and trigger\n');
           end
-        
-          if ~strcmp(C{1}{jj}, '?')  %%if there's a question, the last thing accessed in C should be '?'
-              currblock.questionList{ii} = [];  %%if no question, create an empty cell as a place holder
-              currblock.questionTriggers{ii} = []; %ditto for the question triggers
-          end
-          ii = ii + 1;
+          
+          itemnum = itemnum + 1;
+          %fprintf('item number increased by one\n');
         end
         textLine = fgets(fid);   
     end
     
-    expt{1,length(expt)+1} = currblock;
-    fprintf('currblock added\n');
+    %Add the current block of stimuli to the experiment, if it is not
+    %empty.
+    if (~BlockEmpty(currblock))
+        expt{1,length(expt)+1} = currblock;
+        %fprintf('block added\n');
+    end
     fclose(fid);
 end
+
+%Check that the block is not empty.
+function blockempty = BlockEmpty(block)
+    blockempty = ((length(block.stimulusMatrix) == 0) &&...
+    (length(block.triggerMatrix) == 0) &&...
+    (length(block.questionList) == 0) &&...
+    (length(block.questionTriggers) == 0));
+end
+
+function textslide = ReadTextSlide(textLine,fid)
+    textslide = [];
+    ii = 1;
+    %right now can be no blank lines -- that is a problem!
+    while (-1 ~= textLine)
+        fprintf('%s\n',textLine);
+         C = textscan(textLine,'%q');
+         if (length(C{1}) == 0)
+             textslide = strcat(textslide,'\n');
+             ii = ii + 1;
+             textLine = fgets(fid);
+             continue
+         end
+         if strcmp(C{1}{1},'<textslide>')
+             textLine = fgets(fid);
+             continue
+         end
+         if strcmp(C{1}{1},'</textslide>')
+             break;
+         else
+             textslide = strcat(textslide,textLine,'\n');
+         end
+         textLine = fgets(fid);
+         ii = ii + 1;
+    end
+end
         
-
-
 function RunExperiment(expt,par)
 
 % Grab a time baseline for the entire experiment and send a trigger to log
@@ -238,14 +337,14 @@ results.words = {};
 results.triggers = {};
 end
 
-
 function RunTextSlide(currTextSlide,par)
-Screen('TextSize',par.wPtr,par.textSize);
-DrawFormattedText(par.wPtr,currTextSlide,'center','center',WhiteIndex(par.wPtr));
-Screen('Flip',par.wPtr);
-%right now the button press to move on from the textslide is not
-%recorded. should it be?
-GetButtonPress([par.moveOnButton],[par.moveOnTrigger],par,0);
+    Screen('TextSize',par.wPtr,par.textSize);
+    DrawFormattedText(par.wPtr,currTextSlide,'center','center',WhiteIndex(par.wPtr));
+    Screen('Flip',par.wPtr);
+    %right now the button press to move on from the textslide is not
+    %recorded. should it be?
+    ClearButtonPress;
+    GetButtonPress([par.moveOnButton],[par.moveOnTrigger],par,0);
 end
 
 function RunBlock(currblock,par)
@@ -320,7 +419,7 @@ for i = 1:numItems
         results = UpdateResults(results,timeToLog, '?', currentTriggers);
         %WriteLogFile(logFileName, timeToLog, '?', par.questionTrigger);
 
-        [reactionTime, button, buttonTrigger] = GetButtonPress([par.button1,par.button2],[par.button1Trigger,par.button2Trigger],par,1)
+        [reactionTime, button, buttonTrigger] = GetButtonPress([par.button1,par.button2],[par.button1Trigger,par.button2Trigger],par,1);
        
        % Log the button press itself, if it happened. -1 means the subject
        % did not hit one of the button choices during the allotted time.
@@ -348,7 +447,11 @@ end
 
 end
 
-
+%Waits for a button press by the user of the buttons whose numbers (found using KbName) are specified in the array
+%buttons. send the corresponding trigger for that button, as specified in
+%the array buttonTriggers. If the boolean value timed == 1, after
+%par.qDuration seconds the function ends.  If timed == 0, waits forever
+%until the user types one of the specified buttons.
 function [reactionTime, button, buttonTrigger] = GetButtonPress(buttons,buttonTriggers,par,timed)
         beg = GetSecs();
         %Is this right???
@@ -380,13 +483,25 @@ function [reactionTime, button, buttonTrigger] = GetButtonPress(buttons,buttonTr
         end
 end
 
+%Makes sure no buttons are being pressed/held down before get the new button press.
+%This is important for when, for example, two textslides are one after the
+%other, or for any case when one button press triggers another stage of the
+%experiment that can be moved on from by pressing the same button that ended the last
+%stage.
+function ClearButtonPress()
+    while(true)
+        [keyDetect,reactionTime,keyCode] = KbCheck(-1);
+        if(~keyDetect)
+            break;
+        end
+    end
+end
 
-%this is a useless function... delete?
+%this wrapper function is not being used because it's only one line long... delete?
 function results = RecordButtonPress(results,button,buttonTrigger,reactionTime)
    results = UpdateResults(results,reactionTime, KbName(button), [buttonTrigger]);
 
 end
-
 
 function results = UpdateResults(results, timeToLog, currentWord, currentTriggers)
     
@@ -402,7 +517,6 @@ function list = AddEntry(list,entry)
         list{length(list)+1} = entry;
     end
 end
-
  
 function currblock = InitBlock
     currblock = block;
@@ -412,33 +526,6 @@ function currblock = InitBlock
     currblock.questionTriggers = {};
 end
  
-function textslide = ReadTextSlide(textLine,fid)
-    textslide = [];
-    ii = 1;
-    %right now can be no blank lines -- that is a problem!
-    while (-1 ~= textLine)
-        fprintf('%s\n',textLine);
-         C = textscan(textLine,'%q');
-         if (length(C{1}) == 0)
-             textslide = strcat(textslide,'\n');
-             ii = ii + 1;
-             textLine = fgetl(fid);
-             continue
-         end
-         if strcmp(C{1}{1},'<textslide>')
-             textLine = fgetl(fid);
-             continue
-         end
-         if strcmp(C{1}{1},'</textslide>')
-             break;
-         else
-             textslide = strcat(textslide,textLine,'\n');
-         end
-         textLine = fgets(fid);
-         ii = ii + 1;
-    end
-end
-
 function WriteLogFile(results,logFileName)
 fid = fopen(logFileName,'a');
 while(fid == -1)
@@ -460,105 +547,12 @@ function triggerString = TriggerListToString(triggerList)
         triggerString = 'no triggers sent';
         return
     end
-    triggerString = int2str(triggerList(1))
+    triggerString = int2str(triggerList(1));
     if (length(triggerList)>1)
          for (i = 2:length(triggerList))
                 triggerString = strcat(triggerString,', ',int2str(triggerList(i)));
          end
     end
-end
-
-function WriteLogFileOld(logFileName,timeToLog,currentWord,currentTrigger)
-
-fid = fopen(logFileName,'a');
-if fid == -1
-    error('Cannot write to log file.')
-end
-
-fmt = '%.3f\t%s\t%i\n';
-fprintf(fid,fmt,timeToLog,currentWord,currentTrigger);
-fclose(fid);
-
-end
-
-function par = ReadParameterFile(paramFileName, par)
-
-fid = fopen(paramFileName,'rt');
-
-if (-1 == fid)
-    error('Could not open experiment parameters file.')
-end
-
-textLine = fgets(fid);
-
-while (-1 ~= textLine)
-    %comments in the parameter file are on lines starting with '#'
-    if(textLine(1)=='#')
-        textLine = fgets(fid);
-        continue
-    end
-        fxnToEval = strcat('par.',textLine,';');
-        if (~strcmp(fxnToEval,'par.;'))
-            eval(fxnToEval);
-        end
-    textLine = fgets(fid);
-end
-
-par.toString = ParToString(par);
-fprintf(char(par.toString));
-fclose(fid)
-end
-
-function str = ParToString(par)
-str = '';
-par_fields = fieldnames(par);
-nfields = length(par_fields);
-if (nfields < 1)
-    fprintf('No parameters were entered! Check the parameter file.');
-    return
-end
-str = par_fields(1);
-if (nfields > 1)
-    for (fieldindex = 2:nfields)
-        field = par_fields(fieldindex);
-        value = eval(strcat('par.',char(field)));
-        if(~strcmp(class(value),'string'))
-            value = num2str(value);
-        end
-        str = strcat(str,'\n',field,':',value);
-    end
-end
-
-end
-
-function par = ReadParameterFileOld(paramFileName, par)
-
-fid = fopen(paramFileName,'rt');
-
-if (-1 == fid)
-    error('Could not open experiment parameters file.')
-end
-
-textLine = fgetl(fid);
-P = textscan(textLine,'%f');
-par.wordDuration = P{1}(1);
-par.ISI = P{1}(2);
-par.fixDuration = P{1}(3);
-par.IFI = P{1}(4);
-par.qDuration = P{1}(5);
-par.IQI = P{1}(6);
-par.ITI = P{1}(7);
-par.textSize = P{1}(8);
-par.presDelay = P{1}(9);
-par.toString = textLine;
-%wordDuration ISI fixDuration IFI qDuration IQI ITI textSize presDelay
-
-%should add other validators, e.g. should be 9 parameters
-if isempty(P);
-    fprintf('Warning: experiment not found in experiment parameters file.\n');
-end
-fclose(fid);
-
 end
 
 function WriteRecFile (recFileName,par,subjID, exptFileNameAndPath,paramFileNameAndPath)
