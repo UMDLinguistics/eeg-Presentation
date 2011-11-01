@@ -1,4 +1,4 @@
-function expt = SentEEG() %temporarily outputing experiment cell array for testing purposes only
+function par = SentEEG() %temporarily outputing experiment cell array for testing purposes only
 
 %%Basic script for presenting EEG sentence study
 %%First version 6/3/11 Ellen Lau
@@ -7,14 +7,35 @@ function expt = SentEEG() %temporarily outputing experiment cell array for testi
 
 %%Inputs:
 %%1. Parameter File
-%%%One line, separate each parameter by white space
-%%%wordDuration ISI fixDuration IFI qDuration IQI ITI textSize presDelay
-%%%presDelay affects triggering, so be very careful. this should be set at
-%%%0 unless you know what you're doing.
+%%%Parameter File must be a text file ending in '.par'.
+%%%For an example template, open the folder example_experiment on the Desktop
+%%%and open the textfile 'example.par'.
+%%%Necessary parameters are:
+%%%wordDuration ISI fixDuration IFI qDuration IQI ITI textSize.
+%%%Other parameters have default values hard-coded into SentEEG.m that can
+%%%also be changed by resetting them in the parameter file.
 
-%%2. Stimulus File
-%%%Stimulus File is a text file
-%%%Each row of the text file is a trial
+%%2. Experiment File
+%%%Experiment File must be a text file ending in '.expt'.
+%%%Each line of text in the text file is either:
+%%%a) a filename of a textfile in the same directory as the experiment
+%%%   file.
+%%%b) a variable that will be used to prompt the experimenter to locate
+%%%   a text file that will be read into the experiment (either in the 
+%%%   same directory as the experiment file or in another directory).
+
+%%%This enables part of each experiment to remain constant while other
+%%%parts are set each time the experiment is run.
+
+%%%The information that the experiment file is recording is the ORDER in
+%%%which the information contained in the other text files should be
+%%%displayed.
+
+%%%The text files referenced in the experiment file contain text of two
+%%%types:
+
+%%%Type 1: Stimulus Item
+%%%Each line of text is a trial
 %%%A trigger must be specified for each new visual input in main part of
 %%%trial. So for a sentence, need to provide a trigger after each word.
 %%%E.g. 'The 23 girl 24 went 25 to 13 the 9 store. 7'
@@ -25,14 +46,20 @@ function expt = SentEEG() %temporarily outputing experiment cell array for testi
 %%%E.g. '...the 9 store. 7 ? 101 "Did the girl go to the store?" or
 %%%'...the 9 store. 7 ? 101 "ACCEPT/REJECT?"
 
+%%%Type 2: Text Slide
+%%%Starts with a line '<textslide>' and ends with a line '</textslide>'.
+%%%All lines in between are text that will be displayed on the screen at one
+%%%time, for example, an instructions slide, break slide, or slide at the end
+%%%of the experiment telling the participant they are done.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 %%% Hard-coded parameters
 
 %For coding purposes only:
-[exptPath,paramPath,par.default_experimental_folder] = deal('/Users/cnllab/Desktop/example_experiment/');
-exptFileName = 'bubbles.expt';
+[exptPath,paramPath,par.default_experimental_folder] = deal('/Users/cnllab/Desktop/SentEEG_scrapwork/');
+exptFileName = 'example.expt';
 paramFileName = 'example.par';
 subjID = 'test';
 
@@ -47,11 +74,8 @@ par.button2Trigger = 252;
 par.moveOnButton = KbName('space');
 par.moveOnTrigger = 250;
 
-%%% Configure the data acquisition device
 
-par.di = DaqDeviceIndex; % the DaqDeviceIndex function returns the index of the port assigned to the daq device so you can refer to it in the rest of your script
-DaqDConfigPort(par.di,1,0); % this configures the daq port to either send output or receive input. the first number refers to which port of the daq device, A (0) or B (1). The second number refers to output (0) or input (1)
-DaqDOut(par.di,1,0); % this zeros out the trigger line to get started
+
 
 %%% Call functions that take a while to load the first time
 KbCheck;
@@ -63,8 +87,8 @@ KbCheck;
 %subjID = input('Enter subject ID: ', 's');
 
 exptFilePrefix = strrep(exptFileName,'.expt','');
-par.logFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.log'); %%logs events in same par.directory as stimulus file
-recFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.rec'); %%logs recorpar.ding parameters in same par.directory as stimulus file
+par.logFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.log'); %%logs events in same directory as experiment file
+recFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.rec'); %%logs parameters in same directory as experiment file
 
 %%% Create log files
 
@@ -85,6 +109,9 @@ fclose(fid);
 paramFileNameAndPath = strcat(paramPath,paramFileName);
 par = ReadParameterFile(paramFileNameAndPath,par);
 
+%for calculating which parts of script lead to delay variability
+
+
 %ReadExptFile returns a struct, 'expt', which stores all the data necessary
 %for running the experiment, besides the parameters.
 exptFileNameAndPath = strcat(exptPath,exptFileName);
@@ -94,10 +121,31 @@ expt = ReadExptFile(exptFileName,exptPath);
 %what parameters were used each specific time each experiment was run.
 WriteRecFile(recFileName,par,subjID, exptFileNameAndPath,paramFileNameAndPath);
 
+%par.timing.overall = 0;
+par.timing.configTrigger = 0;
+par.timing.beginTrigger = 0;
+par.timing.responseTriggers = [];
+par.timing.responseIndex = 1;
+par.timing.stimulusTriggers = [];
+par.timing.index = 1;
+par.timing.questionTrigger1 = [];
+par.timing.question1Index = 1;
+par.timing.questionTrigger2 = [];
+par.timing.question2Index = 1;
+
+
+%%% Configure the data acquisition device
+
+par.di = DaqDeviceIndex; % the DaqDeviceIndex function returns the index of the port assigned to the daq device so you can refer to it in the rest of your script
+tic;
+DaqDConfigPort(par.di,1,0); % this configures the daq port to either send output or receive input. the first number refers to which port of the daq device, A (0) or B (1). The second number refers to output (0) or input (1)
+par.timing.configTrigger(1) = toc;
+DaqDOut(par.di,1,0); % this zeros out the trigger line to get started
+
 %Runs the actual experiment, recording subject responses to the log file after
 %every item, where item = a sequence of words with triggers followed by an optional
 %question.
-RunExperiment(expt,par);
+par = RunExperiment(expt,par);
 
 end
 
@@ -105,7 +153,6 @@ end
 %parameter file should be in, see example.par in the folder 
 %example_experiment on the desktop.
 function par = ReadParameterFile(paramFileName, par)
-
 fid = fopen(paramFileName,'rt');
 
 if (-1 == fid)
@@ -121,6 +168,7 @@ while (-1 ~= textLine)
         continue
     end
         fxnToEval = strcat('par.',textLine,';');
+        %fprintf(strcat('this is the function to evaluate: ',fxnToEval,'\n'));
         if (~strcmp(fxnToEval,'par.;'))
             eval(fxnToEval);
         end
@@ -128,8 +176,8 @@ while (-1 ~= textLine)
 end
 
 par.toString = ParToString(par);
-fprintf(char(par.toString));
-fclose(fid)
+%fprintf(char(par.toString));
+fclose(fid);
 end
 
 %Returns a string value encoding all the parameters stored in the
@@ -146,20 +194,20 @@ str = par_fields(1);
 if (nfields > 1)
     for (fieldindex = 2:nfields)
         field = par_fields(fieldindex);
-        value = eval(strcat('par.',char(field)));
+        value = eval(strcat('par.',char(field),';'));
         if(~strcmp(class(value),'string'))
             value = num2str(value);
         end
         str = strcat(str,'\n',field,':',value);
+        fprintf(char(strcat(str,'\n#####\n')));
     end
 end
-
 end
 
 function expt = ReadExptFile(exptFileName,exptPath)
     exptFileNameAndPath = strcat(exptPath,exptFileName);
-    fprintf('Reapar.ding experiment file at:\n');
-    fprintf('%s\n',exptFileNameAndPath);
+    %fprintf('Reading experiment file at:\n');
+    %fprintf('%s\n',exptFileNameAndPath);
     expt = {};
     exptFiles = {};
     fid = fopen(exptFileNameAndPath, 'r');
@@ -207,7 +255,7 @@ function expt = ReadExptSubFile(exptFile,expt)
         
         %If there is a blank line, skip it and get the next line.
         if (numStim == 0)
-            fprintf('there is a blank line\n');
+            %fprintf('there is a blank line\n');
             textLine = fgets(fid); 
             continue
         end
@@ -222,7 +270,7 @@ function expt = ReadExptSubFile(exptFile,expt)
                 expt{1,length(expt)+1} = currblock;
                 currblock = InitBlock;
                 itemnum = 1;
-                fprintf('block added\n');
+                %fprintf('block added\n');
             end
             expt{1,length(expt)+1} = ReadTextSlide(textLine,fid);
             %fprintf('textslide should be added\n');
@@ -276,7 +324,7 @@ function textslide = ReadTextSlide(textLine,fid)
     ii = 1;
     %right now can be no blank lines -- that is a problem!
     while (-1 ~= textLine)
-        fprintf('%s\n',textLine);
+        %fprintf('%s\n',textLine);
          C = textscan(textLine,'%q');
          if (length(C{1}) == 0)
              textslide = strcat(textslide,'\n');
@@ -298,29 +346,32 @@ function textslide = ReadTextSlide(textLine,fid)
     end
 end
         
-function RunExperiment(expt,par)
+function par = RunExperiment(expt,par)
 
 % Grab a time baseline for the entire experiment and send a trigger to log
 
 baseTime = GetSecs();
+
+tic;
 DaqDOut(par.di,1,par.beginTrigger); %Turn trigger on
+par.timing.beginTrigger(1) = toc;
 DaqDOut(par.di,1,0); %Turn trigger off     
 
 
 par.screenNumber = 0;
-par.wPtr = Screen('OpenWindow',par.screenNumber,0,[],32,2);
+par.wPtr = Screen('OpenWindow',par.screenNumber,0,[],32,2);  % This command outputs a lot of text to the Matlab window
 par.black = BlackIndex(par.wPtr);
 
 %what should we be doing with this variable?
 timeToLog = 0;
 
 %why wait one second?
-WaitSecs(1);
+%WaitSecs(1);
 for i = 1:length(expt)
     curritem = expt{i};
     if (strcmp(class(curritem),'block'))
         
-        RunBlock(curritem,par);
+        par = RunBlock(curritem,par);
         
     else
         RunTextSlide(curritem,par);
@@ -347,7 +398,7 @@ function RunTextSlide(currTextSlide,par)
     GetButtonPress([par.moveOnButton],[par.moveOnTrigger],par,0);
 end
 
-function RunBlock(currblock,par)
+function par = RunBlock(currblock,par)
 numItems = length(currblock.stimulusMatrix);
 for i = 1:numItems
     results = InitResults;
@@ -372,8 +423,11 @@ for i = 1:numItems
         Screen('TextSize',par.wPtr,par.textSize);%
         DrawFormattedText(par.wPtr,currentWord,'center','center',WhiteIndex(par.wPtr));
         Screen('DrawingFinished',par.wPtr);
-        timeToLog= Screen('Flip',par.wPtr);     
+        timeToLog= Screen('Flip',par.wPtr);    
+        tic;
         DaqDOut(par.di,1,currentTrigger); %Turn trigger on
+        par.timing.stimulusTriggers(par.timing.index) = toc;
+        par.timing.index = par.timing.index + 1;
         DaqDOut(par.di,1,0); %Turn trigger off     
         
         % Make timeToLog the actual time the subject saw stimuli, if
@@ -403,10 +457,15 @@ for i = 1:numItems
         Screen('DrawingFinished',par.wPtr);
         timeToLog= Screen('Flip',par.wPtr);
         %Output trigger to show a question was presented
+        tic;
         DaqDOut(par.di,1,par.questionTrigger);
+        par.timing.questionTrigger1(par.timing.question1Index) = toc;
+        par.timing.question1Index = par.timing.question1Index + 1;
         DaqDOut(par.di,1,0);
         %Output trigger for that specific question
         DaqDOut(par.di,1,currQuestionTrigger);
+        par.timing.questionTrigger2(par.timing.question2Index) = toc;
+        par.timing.question2Index = par.timing.question2Index + 1;
         DaqDOut(par.di,1,0);
         currentTriggers = [par.questionTrigger, currQuestionTrigger];
         
@@ -419,7 +478,7 @@ for i = 1:numItems
         results = UpdateResults(results,timeToLog, '?', currentTriggers);
         %WriteLogFile(logFileName, timeToLog, '?', par.questionTrigger);
 
-        [reactionTime, button, buttonTrigger] = GetButtonPress([par.button1,par.button2],[par.button1Trigger,par.button2Trigger],par,1);
+        [reactionTime, button, buttonTrigger, par] = GetButtonPress([par.button1,par.button2],[par.button1Trigger,par.button2Trigger],par,1);
        
        % Log the button press itself, if it happened. -1 means the subject
        % did not hit one of the button choices during the allotted time.
@@ -452,7 +511,7 @@ end
 %the array buttonTriggers. If the boolean value timed == 1, after
 %par.qDuration seconds the function ends.  If timed == 0, waits forever
 %until the user types one of the specified buttons.
-function [reactionTime, button, buttonTrigger] = GetButtonPress(buttons,buttonTriggers,par,timed)
+function [reactionTime, button, buttonTrigger, par] = GetButtonPress(buttons,buttonTriggers,par,timed)
         beg = GetSecs();
         %Is this right???
         absTime = beg + par.qDuration;                    
@@ -465,10 +524,13 @@ function [reactionTime, button, buttonTrigger] = GetButtonPress(buttons,buttonTr
             %simultaneously for all buttons??
             for (i = 1:length(buttons));
                 if (keyCode(buttons(i)));
+                    tic;
                     DaqDOut(par.di,1,buttonTriggers(i));
+                    par.timing.responseTriggers(par.timing.responseIndex) = toc;
+                    par.timing.responseIndex = par.timing.responseIndex + 1;
                     DaqDOut(par.di,1,0);
-                    button = buttons(i)
-                    buttonTrigger = buttonTriggers(i)
+                    button = buttons(i);
+                    buttonTrigger = buttonTriggers(i);
                     flag = 1;
                     break;
                 end
@@ -495,12 +557,6 @@ function ClearButtonPress()
             break;
         end
     end
-end
-
-%this wrapper function is not being used because it's only one line long... delete?
-function results = RecordButtonPress(results,button,buttonTrigger,reactionTime)
-   results = UpdateResults(results,reactionTime, KbName(button), [buttonTrigger]);
-
 end
 
 function results = UpdateResults(results, timeToLog, currentWord, currentTriggers)
@@ -568,7 +624,7 @@ fprintf(fid,fmt,'Subject ID:',subjID);
 fprintf(fid,'%s\n','Parameters:');
 parstrings = regexp(par.toString,'\\n','split');
 for i = 1:length(parstrings{1})
-    fprintf(1,'%s\n',char(parstrings{1}{i}));
+    %fprintf(1,'%s\n',char(parstrings{1}{i}));
     fprintf(fid,'%s\n',char(parstrings{1}{i}));
 end
 fclose(fid);
