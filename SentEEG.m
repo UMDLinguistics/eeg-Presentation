@@ -1,12 +1,19 @@
-function par = SentEEG() %temporarily outputing experiment cell array for testing purposes only
-
 %%Basic script for presenting EEG sentence study
 %%First version 6/3/11 Ellen Lau
 %%Modified by Cybelle Smith  Fall 2011 (10/10/11)
 %%Partially based on code from Scott Burns, MGH
 
-%%Inputs:
-%%1. Parameter File
+%For tutorial, run "sentEEG", select .expt file "example.expt"
+%in the example_experiment folder, then select "example.par" as the
+%parameter file, enter whatever subjectID you want.
+
+%NOTE: at present, if the same subjectID is entered twice the
+%log and rec files named subjectID_experimentName.log and 
+%subjectID_experimentName.rec in the same folder as the .expt file
+%will be overwritten!
+
+%%Files to Select:
+%%A. Parameter File (select second)
 %%%Parameter File must be a text file ending in '.par'.
 %%%For an example template, open the folder example_experiment on the Desktop
 %%%and open the textfile 'example.par'.
@@ -15,7 +22,7 @@ function par = SentEEG() %temporarily outputing experiment cell array for testin
 %%%Other parameters have default values hard-coded into SentEEG.m that can
 %%%also be changed by resetting them in the parameter file.
 
-%%2. Experiment File
+%%B. Experiment File (select first)
 %%%Experiment File must be a text file ending in '.expt'.
 %%%Each line of text in the text file is either:
 %%%a) a filename of a textfile in the same directory as the experiment
@@ -52,16 +59,25 @@ function par = SentEEG() %temporarily outputing experiment cell array for testin
 %%%time, for example, an instructions slide, break slide, or slide at the end
 %%%of the experiment telling the participant they are done.
 
+%%Useful fact: if the program freezes while the screen is black you can
+%%escape by typing "sca" and hitting return (you may need to do it more
+%%than once since the first time MATLAB might think it is the command "jjfjsca"
+%%or something and not recognize it.)
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function expt = SentEEG() %temporarily outputing parameters for testing purposes only
+
+
 
 
 %%% Hard-coded parameters
 
 %For coding purposes only:
-[exptPath,paramPath,par.default_experimental_folder] = deal('/Users/cnllab/Desktop/SentEEG_scrapwork/');
-exptFileName = 'example.expt';
-paramFileName = 'example.par';
-subjID = 'test';
+[exptPath,paramPath,par.default_experimental_folder] = deal('/Users/cnllab/Desktop/example_experiment/');
+%exptFileName = 'example.expt';
+%paramFileName = 'example.par';
+%subjID = 'test';
 
 
 %Default parameters; can be reset using the parameter file.
@@ -82,9 +98,9 @@ KbCheck;
 
 %%% Initialize file names
 %%% Select experiment and parameter files and enter subject ID.
-%[exptFileName, exptPath] = uigetfile('*.expt', 'Select experiment file',par.default_experimental_folder);
-%[paramFileName, paramPath] = uigetfile('*.par', 'Select parameter file',exptPath);
-%subjID = input('Enter subject ID: ', 's');
+[exptFileName, exptPath] = uigetfile('*.expt', 'Select experiment file',par.default_experimental_folder);
+[paramFileName, paramPath] = uigetfile('*.par', 'Select parameter file',exptPath);
+subjID = input('Enter subject ID: ', 's');
 
 exptFilePrefix = strrep(exptFileName,'.expt','');
 par.logFileName = strcat(exptPath,subjID,'_',exptFilePrefix,'.log'); %%logs events in same directory as experiment file
@@ -141,6 +157,17 @@ tic;
 DaqDConfigPort(par.di,1,0); % this configures the daq port to either send output or receive input. the first number refers to which port of the daq device, A (0) or B (1). The second number refers to output (0) or input (1)
 par.timing.configTrigger(1) = toc;
 DaqDOut(par.di,1,0); % this zeros out the trigger line to get started
+
+%DaqDOut(par.di,1,par.beginTrigger);
+%DaqDOut(par.di,1,0);
+%DaqDOut(par.di,1,par.questionTrigger);
+%DaqDOut(par.di,1,0);
+%DaqDOut(par.di,1,par.button1Trigger);
+%DaqDOut(par.di,1,0);
+%DaqDOut(par.di,1,par.button2Trigger);
+%DaqDOut(par.di,1,0);
+%DaqDOut(par.di,1,par.moveOnTrigger);
+%DaqDOut(par.di,1,0);
 
 %Runs the actual experiment, recording subject responses to the log file after
 %every item, where item = a sequence of words with triggers followed by an optional
@@ -199,7 +226,7 @@ if (nfields > 1)
             value = num2str(value);
         end
         str = strcat(str,'\n',field,':',value);
-        fprintf(char(strcat(str,'\n#####\n')));
+        %fprintf(char(strcat(str,'\n#####\n')));
     end
 end
 end
@@ -284,6 +311,10 @@ function expt = ReadExptSubFile(exptFile,expt)
               if strcmp(C{1}{jj},'?') 
                      currblock.questionTriggers{itemnum} = C{2}(jj);
                      currblock.questionList{itemnum} = C{1}{jj+1};
+                     if(jj==1) %%if no words prior to the question, create a blank item and trigger
+                         currblock.stimulusMatrix{itemnum}{jj} = [];
+                         currblock.triggerMatrix{itemnum}{jj} = [];
+                     end
                      %fprintf('added a question and question trigger\n');
                   break
               else
@@ -423,12 +454,13 @@ for i = 1:numItems
         Screen('TextSize',par.wPtr,par.textSize);%
         DrawFormattedText(par.wPtr,currentWord,'center','center',WhiteIndex(par.wPtr));
         Screen('DrawingFinished',par.wPtr);
-        timeToLog= Screen('Flip',par.wPtr);    
         tic;
+        timeToLog= Screen('Flip',par.wPtr);      
         DaqDOut(par.di,1,currentTrigger); %Turn trigger on
         par.timing.stimulusTriggers(par.timing.index) = toc;
+        DaqDOut(par.di,1,0); %Turn trigger off 
         par.timing.index = par.timing.index + 1;
-        DaqDOut(par.di,1,0); %Turn trigger off     
+            
         
         % Make timeToLog the actual time the subject saw stimuli, if
         % necessary or desirable to do so (may need to change code)
@@ -440,8 +472,6 @@ for i = 1:numItems
         WaitSecs(par.ISI);
  
         % Log this trial
-        %Change this so that ONLY write to files AFTER the experiment is
-        %done!  That way won't mess with the experimental timing
         %WriteLogFile(logFileName, timeToLog, currentWord, currentTrigger);
         currentTriggers = [currentTrigger];
         results = UpdateResults(results,timeToLog, currentWord, currentTriggers);
@@ -475,7 +505,7 @@ for i = 1:numItems
         % Log the presentation of the response screen
         %Change this so that ONLY write to files AFTER the experiment is
         %done!  That way won't mess with the experimental timing
-        results = UpdateResults(results,timeToLog, '?', currentTriggers);
+        results = UpdateResults(results,timeToLog, currentQuestion, currentTriggers);
         %WriteLogFile(logFileName, timeToLog, '?', par.questionTrigger);
 
         [reactionTime, button, buttonTrigger, par] = GetButtonPress([par.button1,par.button2],[par.button1Trigger,par.button2Trigger],par,1);

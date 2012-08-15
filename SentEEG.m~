@@ -1,12 +1,19 @@
-function expt = SentEEG() %temporarily outputing experiment cell array for testing purposes only
-
 %%Basic script for presenting EEG sentence study
 %%First version 6/3/11 Ellen Lau
 %%Modified by Cybelle Smith  Fall 2011 (10/10/11)
 %%Partially based on code from Scott Burns, MGH
 
-%%Inputs:
-%%1. Parameter File
+%For tutorial, run "sentEEG", select .expt file "example.expt"
+%in the example_experiment folder, then select "example.par" as the
+%parameter file, enter whatever subjectID you want.
+
+%NOTE: at present, if the same subjectID is entered twice the
+%log and rec files named subjectID_experimentName.log and 
+%subjectID_experimentName.rec in the same folder as the .expt file
+%will be overwritten!
+
+%%Files to Select:
+%%A. Parameter File (select second)
 %%%Parameter File must be a text file ending in '.par'.
 %%%For an example template, open the folder example_experiment on the Desktop
 %%%and open the textfile 'example.par'.
@@ -15,7 +22,7 @@ function expt = SentEEG() %temporarily outputing experiment cell array for testi
 %%%Other parameters have default values hard-coded into SentEEG.m that can
 %%%also be changed by resetting them in the parameter file.
 
-%%2. Experiment File
+%%B. Experiment File (select first)
 %%%Experiment File must be a text file ending in '.expt'.
 %%%Each line of text in the text file is either:
 %%%a) a filename of a textfile in the same directory as the experiment
@@ -52,21 +59,30 @@ function expt = SentEEG() %temporarily outputing experiment cell array for testi
 %%%time, for example, an instructions slide, break slide, or slide at the end
 %%%of the experiment telling the participant they are done.
 
+%%Useful fact: if the program freezes while the screen is black you can
+%%escape by typing "sca" and hitting return (you may need to do it more
+%%than once since the first time MATLAB might think it is the command "jjfjsca"
+%%or something and not recognize it.)
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function expt = SentEEG() %temporarily outputing parameters for testing purposes only
+
+
 
 
 %%% Hard-coded parameters
 
 %For coding purposes only:
-[exptPath,paramPath,par.default_experimental_folder] = deal('/Users/cnllab/Desktop/');
+[exptPath,paramPath,par.default_experimental_folder] = deal('/Users/cnllab/Desktop/example_experiment/');
 %exptFileName = 'example.expt';
 %paramFileName = 'example.par';
 %subjID = 'test';
 
 
 %Default parameters; can be reset using the parameter file.
-par.beginTrigger = 254;
-par.questionTrigger = 253;
+par.beginTrigger = 254; %sent at start of running the experiment (including the introduction)
+par.questionTrigger = 253; %generic trigger sent every time a question is asked on the screen.
 par.button1 = KbName('f');
 par.button1Trigger = 251;
 par.button2 = KbName('j');
@@ -74,22 +90,8 @@ par.button2Trigger = 252;
 par.moveOnButton = KbName('space');
 par.moveOnTrigger = 250;
 
-par.timing.overall = 0;
-par.timing.configTrigger = 0;
-par.timing.beginTrigger = 0;
-par.timing.responseTriggers = 0;
-par.timing.stimulusTriggers = {};
-par.timing.questionTrigger1 = 0;
-par.timing.questionTrigger2 = 0;
 
 
-%%% Configure the data acquisition device
-
-par.di = DaqDeviceIndex; % the DaqDeviceIndex function returns the index of the port assigned to the daq device so you can refer to it in the rest of your script
-tic;
-DaqDConfigPort(par.di,1,0); % this configures the daq port to either send output or receive input. the first number refers to which port of the daq device, A (0) or B (1). The second number refers to output (0) or input (1)
-par.timing.configTrigger(1) = toc;
-DaqDOut(par.di,1,0); % this zeros out the trigger line to get started
 
 %%% Call functions that take a while to load the first time
 KbCheck;
@@ -123,6 +125,9 @@ fclose(fid);
 paramFileNameAndPath = strcat(paramPath,paramFileName);
 par = ReadParameterFile(paramFileNameAndPath,par);
 
+%for calculating which parts of script lead to delay variability
+
+
 %ReadExptFile returns a struct, 'expt', which stores all the data necessary
 %for running the experiment, besides the parameters.
 exptFileNameAndPath = strcat(exptPath,exptFileName);
@@ -132,10 +137,42 @@ expt = ReadExptFile(exptFileName,exptPath);
 %what parameters were used each specific time each experiment was run.
 WriteRecFile(recFileName,par,subjID, exptFileNameAndPath,paramFileNameAndPath);
 
+%par.timing.overall = 0;
+par.timing.configTrigger = 0;
+par.timing.beginTrigger = 0;
+par.timing.responseTriggers = [];
+par.timing.responseIndex = 1;
+par.timing.stimulusTriggers = [];
+par.timing.index = 1;
+par.timing.questionTrigger1 = [];
+par.timing.question1Index = 1;
+par.timing.questionTrigger2 = [];
+par.timing.question2Index = 1;
+
+
+%%% Configure the data acquisition device
+
+par.di = DaqDeviceIndex; % the DaqDeviceIndex function returns the index of the port assigned to the daq device so you can refer to it in the rest of your script
+tic;
+DaqDConfigPort(par.di,1,0); % this configures the daq port to either send output or receive input. the first number refers to which port of the daq device, A (0) or B (1). The second number refers to output (0) or input (1)
+par.timing.configTrigger(1) = toc;
+DaqDOut(par.di,1,0); % this zeros out the trigger line to get started
+
+%DaqDOut(par.di,1,par.beginTrigger);
+%DaqDOut(par.di,1,0);
+%DaqDOut(par.di,1,par.questionTrigger);
+%DaqDOut(par.di,1,0);
+%DaqDOut(par.di,1,par.button1Trigger);
+%DaqDOut(par.di,1,0);
+%DaqDOut(par.di,1,par.button2Trigger);
+%DaqDOut(par.di,1,0);
+%DaqDOut(par.di,1,par.moveOnTrigger);
+%DaqDOut(par.di,1,0);
+
 %Runs the actual experiment, recording subject responses to the log file after
 %every item, where item = a sequence of words with triggers followed by an optional
 %question.
-RunExperiment(expt,par);
+par = RunExperiment(expt,par);
 
 end
 
@@ -189,6 +226,7 @@ if (nfields > 1)
             value = num2str(value);
         end
         str = strcat(str,'\n',field,':',value);
+        %fprintf(char(strcat(str,'\n#####\n')));
     end
 end
 end
@@ -273,6 +311,10 @@ function expt = ReadExptSubFile(exptFile,expt)
               if strcmp(C{1}{jj},'?') 
                      currblock.questionTriggers{itemnum} = C{2}(jj);
                      currblock.questionList{itemnum} = C{1}{jj+1};
+                     if(jj==1) %%if no words prior to the question, create a blank item and trigger
+                         currblock.stimulusMatrix{itemnum}{jj} = [];
+                         currblock.triggerMatrix{itemnum}{jj} = [];
+                     end
                      %fprintf('added a question and question trigger\n');
                   break
               else
@@ -335,7 +377,7 @@ function textslide = ReadTextSlide(textLine,fid)
     end
 end
         
-function RunExperiment(expt,par)
+function par = RunExperiment(expt,par)
 
 % Grab a time baseline for the entire experiment and send a trigger to log
 
@@ -360,7 +402,7 @@ for i = 1:length(expt)
     curritem = expt{i};
     if (strcmp(class(curritem),'block'))
         
-        RunBlock(curritem,par);
+        par = RunBlock(curritem,par);
         
     else
         RunTextSlide(curritem,par);
@@ -387,7 +429,7 @@ function RunTextSlide(currTextSlide,par)
     GetButtonPress([par.moveOnButton],[par.moveOnTrigger],par,0);
 end
 
-function RunBlock(currblock,par)
+function par = RunBlock(currblock,par)
 numItems = length(currblock.stimulusMatrix);
 for i = 1:numItems
     results = InitResults;
@@ -413,10 +455,12 @@ for i = 1:numItems
         DrawFormattedText(par.wPtr,currentWord,'center','center',WhiteIndex(par.wPtr));
         Screen('DrawingFinished',par.wPtr);
         tic;
-        timeToLog= Screen('Flip',par.wPtr);     
+        timeToLog= Screen('Flip',par.wPtr);      
         DaqDOut(par.di,1,currentTrigger); %Turn trigger on
-        par.timing.stimulusTriggers{i}(w) = toc;
-        DaqDOut(par.di,1,0); %Turn trigger off     
+        par.timing.stimulusTriggers(par.timing.index) = toc;
+        DaqDOut(par.di,1,0); %Turn trigger off 
+        par.timing.index = par.timing.index + 1;
+            
         
         % Make timeToLog the actual time the subject saw stimuli, if
         % necessary or desirable to do so (may need to change code)
@@ -428,8 +472,6 @@ for i = 1:numItems
         WaitSecs(par.ISI);
  
         % Log this trial
-        %Change this so that ONLY write to files AFTER the experiment is
-        %done!  That way won't mess with the experimental timing
         %WriteLogFile(logFileName, timeToLog, currentWord, currentTrigger);
         currentTriggers = [currentTrigger];
         results = UpdateResults(results,timeToLog, currentWord, currentTriggers);
@@ -445,10 +487,15 @@ for i = 1:numItems
         Screen('DrawingFinished',par.wPtr);
         timeToLog= Screen('Flip',par.wPtr);
         %Output trigger to show a question was presented
+        tic;
         DaqDOut(par.di,1,par.questionTrigger);
+        par.timing.questionTrigger1(par.timing.question1Index) = toc;
+        par.timing.question1Index = par.timing.question1Index + 1;
         DaqDOut(par.di,1,0);
         %Output trigger for that specific question
         DaqDOut(par.di,1,currQuestionTrigger);
+        par.timing.questionTrigger2(par.timing.question2Index) = toc;
+        par.timing.question2Index = par.timing.question2Index + 1;
         DaqDOut(par.di,1,0);
         currentTriggers = [par.questionTrigger, currQuestionTrigger];
         
@@ -458,10 +505,10 @@ for i = 1:numItems
         % Log the presentation of the response screen
         %Change this so that ONLY write to files AFTER the experiment is
         %done!  That way won't mess with the experimental timing
-        results = UpdateResults(results,timeToLog, '?', currentTriggers);
+        results = UpdateResults(results,timeToLog, currentQuestion, currentTriggers);
         %WriteLogFile(logFileName, timeToLog, '?', par.questionTrigger);
 
-        [reactionTime, button, buttonTrigger] = GetButtonPress([par.button1,par.button2],[par.button1Trigger,par.button2Trigger],par,1);
+        [reactionTime, button, buttonTrigger, par] = GetButtonPress([par.button1,par.button2],[par.button1Trigger,par.button2Trigger],par,1);
        
        % Log the button press itself, if it happened. -1 means the subject
        % did not hit one of the button choices during the allotted time.
@@ -494,7 +541,7 @@ end
 %the array buttonTriggers. If the boolean value timed == 1, after
 %par.qDuration seconds the function ends.  If timed == 0, waits forever
 %until the user types one of the specified buttons.
-function [reactionTime, button, buttonTrigger] = GetButtonPress(buttons,buttonTriggers,par,timed)
+function [reactionTime, button, buttonTrigger, par] = GetButtonPress(buttons,buttonTriggers,par,timed)
         beg = GetSecs();
         %Is this right???
         absTime = beg + par.qDuration;                    
@@ -507,7 +554,10 @@ function [reactionTime, button, buttonTrigger] = GetButtonPress(buttons,buttonTr
             %simultaneously for all buttons??
             for (i = 1:length(buttons));
                 if (keyCode(buttons(i)));
+                    tic;
                     DaqDOut(par.di,1,buttonTriggers(i));
+                    par.timing.responseTriggers(par.timing.responseIndex) = toc;
+                    par.timing.responseIndex = par.timing.responseIndex + 1;
                     DaqDOut(par.di,1,0);
                     button = buttons(i);
                     buttonTrigger = buttonTriggers(i);
